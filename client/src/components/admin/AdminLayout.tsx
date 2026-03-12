@@ -18,11 +18,13 @@ import {
   ArrowLeft } from
 'lucide-react';
 import { Toaster } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024);
@@ -95,6 +97,9 @@ export function AdminLayout() {
     const currentItem = navItems.find((item) => item.path === location.pathname);
     return currentItem ? currentItem.name : 'Admin Panel';
   };
+  const adminName = user?.name || 'Admin User';
+  const adminRole = user?.role === 'admin' ? 'Admin' : 'User';
+  const adminInitial = (user?.firstName || user?.name || 'A').charAt(0).toUpperCase();
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
       {/* Mobile Sidebar Overlay */}
@@ -228,11 +233,11 @@ export function AdminLayout() {
             <div className="h-8 w-px bg-subtle/30"></div>
             <div className="flex items-center gap-3">
               <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium text-primary">Admin User</p>
-                <p className="text-xs text-muted">Super Admin</p>
+                <p className="text-sm font-medium text-primary">{adminName}</p>
+                <p className="text-xs text-muted">{adminRole}</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-accent-gold flex items-center justify-center text-background font-bold text-lg shadow-lg shadow-accent-gold/20">
-                A
+                {adminInitial}
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getStats,
+  getProducts,
   getUsers,
   updateUser,
   getOrders,
@@ -15,6 +16,7 @@ import { admin } from '../middlewares/admin.middleware';
 const router = express.Router();
 
 router.get('/stats', protect, admin, getStats);
+router.get('/products', protect, admin, getProducts);
 router.get('/users', protect, admin, getUsers);
 router.put('/users/:id', protect, admin, updateUser);
 router.get('/orders', protect, admin, getOrders);
