@@ -19,7 +19,7 @@ import {
 } from 'recharts';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { useAuth } from '../contexts/AuthContext';
+import { useSellerAuth } from '../contexts/SellerAuthContext';
 import { getErrorMessage } from '../lib/api';
 import { fetchAdminStats, type AdminDashboardStats } from '../lib/admin';
 
@@ -82,11 +82,11 @@ function getStatusBadgeVariant(
 }
 
 export function AdminDashboard() {
-  const { token, user } = useAuth();
+  const { token, seller } = useSellerAuth();
   const [stats, setStats] = useState<AdminDashboardStats>(() => createEmptyStats());
 
   useEffect(() => {
-    if (!token || user?.role !== 'admin') {
+    if (!token || !seller) {
       setStats(createEmptyStats());
       return;
     }
@@ -122,7 +122,7 @@ export function AdminDashboard() {
     return () => {
       isCancelled = true;
     };
-  }, [token, user?.role]);
+  }, [seller, token]);
 
   const statCards = useMemo(
     () => [
@@ -166,7 +166,7 @@ export function AdminDashboard() {
             Dashboard Overview
           </h1>
           <p className="text-body text-sm mt-1">
-            Welcome back, Admin. Here's what's happening today.
+            Welcome back, {seller?.businessName || 'Seller'}. Here's what's happening today.
           </p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Laptop, Mail, Lock, User, Phone } from 'lucide-react';
 import { toast } from 'sonner';
@@ -93,8 +93,17 @@ export function Auth() {
           </div>
         </div>
 
+        <div className="flex justify-center gap-2 mb-6">
+          <Button size="sm">Continue as Customer</Button>
+          <Link to="/seller/auth">
+            <Button variant="outline" size="sm">
+              Continue as Seller
+            </Button>
+          </Link>
+        </div>
+
         <h2 className="text-2xl font-bold text-center text-primary mb-2">
-          {isLogin ? 'Welcome back' : 'Create an account'}
+          {isLogin ? 'Customer Login' : 'Create an account'}
         </h2>
 
         <p className="text-center text-body mb-8">
@@ -199,6 +208,15 @@ export function Auth() {
             >
               {isLogin ? 'Sign up' : 'Sign in'}
             </button>
+          </p>
+          <p className="text-sm text-body mt-3">
+            Seller account?{' '}
+            <Link
+              to="/seller/auth"
+              className="text-accent-gold hover:text-accent-goldHover font-medium transition-colors"
+            >
+              Continue as Seller
+            </Link>
           </p>
         </div>
       </motion.div>

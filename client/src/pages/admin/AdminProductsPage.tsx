@@ -3,7 +3,7 @@ import { Plus, Search, Edit, Trash2, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import type { Product } from '../../types';
-import { useAuth } from '../../contexts/AuthContext';
+import { useSellerAuth } from '../../contexts/SellerAuthContext';
 import { getErrorMessage } from '../../lib/api';
 import {
   createAdminProduct,
@@ -12,6 +12,11 @@ import {
   type AdminProductsResponse,
   updateAdminProduct,
 } from '../../lib/admin';
+import { uploadSellerProductImage } from '../../lib/seller';
+import {
+  ProductFormModal,
+  type ProductFormSubmission,
+} from '../../components/admin/ProductFormModal';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
@@ -49,80 +54,42 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '');
 }
 
-function buildProductPayload(product?: Product) {
-  const name = window.prompt('Product name', product?.name || '');
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
 
-  if (!name || !name.trim()) {
-    return null;
-  }
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
 
-  const brand = window.prompt('Brand', product?.brand || '');
+      reject(new Error('Failed to read image file'));
+    };
 
-  if (!brand || !brand.trim()) {
-    return null;
-  }
-
-  const categoryInput = window.prompt(
-    'Category (Laptops or Accessories)',
-    product?.category || 'Laptops'
-  );
-  const category: ProductCategory =
-    categoryInput === 'Accessories' ? 'Accessories' : 'Laptops';
-
-  const priceInput = window.prompt(
-    'Price',
-    String(product?.discountPrice || product?.price || 0)
-  );
-  const stockInput = window.prompt('Stock', String(product?.stock ?? 0));
-  const shortDescription = window.prompt(
-    'Short description',
-    product?.shortDescription || `${name.trim()} by ${brand.trim()}`
-  );
-  const fullDescription = window.prompt(
-    'Full description',
-    product?.fullDescription || shortDescription || `${name.trim()} by ${brand.trim()}`
-  );
-
-  const price = Number(priceInput);
-  const stock = Number(stockInput);
-  const baseSlug = slugify(name);
-  const uniqueSuffix = Date.now();
-
-  return {
-    name: name.trim(),
-    brand: brand.trim(),
-    category,
-    price: Number.isFinite(price) ? price : product?.price || 0,
-    stock: Number.isFinite(stock) ? Math.max(0, Math.trunc(stock)) : product?.stock || 0,
-    shortDescription: (shortDescription || '').trim() || `${name.trim()} by ${brand.trim()}`,
-    fullDescription: (fullDescription || '').trim() || `${name.trim()} by ${brand.trim()}`,
-    slug: product?.slug || `${baseSlug}-${uniqueSuffix}`,
-    sku: product?.sku || `SKU-${uniqueSuffix}`,
-    images: product?.images || [],
-    specifications: product?.specifications || {},
-    featured: product?.featured || false,
-    rating: product?.rating || 0,
-    reviewsCount: product?.reviewsCount || 0,
-    discountPrice: product?.discountPrice,
-    subcategory: product?.subcategory,
-  };
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
 }
 
 export function AdminProductsPage() {
-  const { token, user } = useAuth();
+  const { token, seller } = useSellerAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [page, setPage] = useState(1);
   const [productsResponse, setProductsResponse] =
     useState<AdminProductsResponse>(EMPTY_PRODUCTS);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
 
   useEffect(() => {
     setPage(1);
   }, [categoryFilter, searchTerm]);
 
   useEffect(() => {
-    if (!token || user?.role !== 'admin') {
+    if (!token || !seller) {
       setProductsResponse(EMPTY_PRODUCTS);
       setIsLoading(false);
       return;
@@ -157,7 +124,7 @@ export function AdminProductsPage() {
     return () => {
       isCancelled = true;
     };
-  }, [categoryFilter, page, searchTerm, token, user?.role]);
+  }, [categoryFilter, page, searchTerm, seller, token]);
 
   const pageNumbers = useMemo(
     () => buildPageNumbers(productsResponse.pagination.page, productsResponse.pagination.totalPages),
@@ -187,44 +154,103 @@ export function AdminProductsPage() {
     }
   };
 
-  const handleAddProduct = async () => {
+  const closeProductModal = () => {
+    if (isSubmittingProduct) {
+      return;
+    }
+
+    setIsProductModalOpen(false);
+    setSelectedProduct(null);
+  };
+
+  const resetProductModal = () => {
+    setIsProductModalOpen(false);
+    setSelectedProduct(null);
+  };
+
+  const uploadSelectedImages = async (files: File[]) => {
+    if (!token || files.length === 0) {
+      return [] as string[];
+    }
+
+    return Promise.all(
+      files.map(async (file) => {
+        const image = await readFileAsDataUrl(file);
+        const response = await uploadSellerProductImage(token, image);
+        return response.url;
+      })
+    );
+  };
+
+  const buildProductPayload = (
+    values: ProductFormSubmission,
+    product?: Product | null
+  ) => {
+    const uniqueSuffix = Date.now();
+    const baseSlug = slugify(values.name);
+
+    return {
+      name: values.name,
+      brand: values.brand,
+      category: values.category,
+      price: values.price,
+      stock: values.stock,
+      shortDescription: values.shortDescription,
+      fullDescription: values.fullDescription,
+      slug: product?.slug || `${baseSlug}-${uniqueSuffix}`,
+      sku: product?.sku || `SKU-${uniqueSuffix}`,
+      images: values.existingImages,
+      specifications: values.specifications,
+      featured: values.featured,
+      rating: product?.rating || 0,
+      reviewsCount: product?.reviewsCount || 0,
+      discountPrice: values.discountPrice,
+      subcategory: values.subcategory || undefined,
+    };
+  };
+
+  const handleAddProduct = () => {
+    setSelectedProduct(null);
+    setIsProductModalOpen(true);
+  };
+
+  const handleProductSubmit = async (values: ProductFormSubmission) => {
     if (!token) {
       return;
     }
 
-    const payload = buildProductPayload();
-
-    if (!payload) {
-      return;
-    }
+    setIsSubmittingProduct(true);
 
     try {
-      await createAdminProduct(token, payload);
-      toast.success('Product created');
+      const uploadedImages = await uploadSelectedImages(values.newImageFiles);
+      const payload = buildProductPayload(
+        {
+          ...values,
+          existingImages: [...values.existingImages, ...uploadedImages],
+        },
+        selectedProduct
+      );
+
+      if (selectedProduct) {
+        await updateAdminProduct(token, selectedProduct.id, payload);
+        toast.success('Product updated');
+      } else {
+        await createAdminProduct(token, payload);
+        toast.success('Product created');
+      }
+
+      resetProductModal();
       await refreshProducts();
     } catch (error) {
       toast.error(getErrorMessage(error));
+    } finally {
+      setIsSubmittingProduct(false);
     }
   };
 
-  const handleEditProduct = async (product: Product) => {
-    if (!token) {
-      return;
-    }
-
-    const payload = buildProductPayload(product);
-
-    if (!payload) {
-      return;
-    }
-
-    try {
-      await updateAdminProduct(token, product.id, payload);
-      toast.success('Product updated');
-      await refreshProducts();
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    }
+  const handleEditProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setIsProductModalOpen(true);
   };
 
   const handleDeleteProduct = async (product: Product) => {
@@ -486,7 +512,14 @@ export function AdminProductsPage() {
           </div>
         </div>
       </Card>
+      <ProductFormModal
+        isOpen={isProductModalOpen}
+        mode={selectedProduct ? 'edit' : 'add'}
+        product={selectedProduct}
+        isSubmitting={isSubmittingProduct}
+        onClose={closeProductModal}
+        onSubmit={handleProductSubmit}
+      />
     </div>
   );
 }
-type ProductCategory = Product['category'];

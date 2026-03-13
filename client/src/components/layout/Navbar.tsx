@@ -153,9 +153,11 @@ export function Navbar() {
                 </Link>
             )}
               <div className="pt-4">
-                <Button variant="primary" className="w-full justify-center">
-                  Sign In
-                </Button>
+                <Link to="/auth">
+                  <Button variant="primary" className="w-full justify-center">
+                    Sign In
+                  </Button>
+                </Link>
               </div>
             </div>
           </motion.div>

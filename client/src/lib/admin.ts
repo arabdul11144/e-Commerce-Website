@@ -1,5 +1,6 @@
 import type { Product } from '../types';
 import { apiRequest } from './api';
+import { normalizeProduct } from '../utils/product';
 
 export interface AdminPagination {
   page: number;
@@ -134,7 +135,10 @@ export function fetchAdminProducts(token: string, options: AdminQueryOptions = {
   return apiRequest<AdminProductsResponse>(
     `/api/admin/products${buildQueryString(options)}`,
     { token }
-  );
+  ).then((response) => ({
+    ...response,
+    items: (response.items ?? []).map((product) => normalizeProduct(product)),
+  }));
 }
 
 export function createAdminProduct(token: string, payload: Partial<Product>) {
@@ -142,7 +146,7 @@ export function createAdminProduct(token: string, payload: Partial<Product>) {
     method: 'POST',
     token,
     body: JSON.stringify(payload),
-  });
+  }).then((product) => normalizeProduct(product));
 }
 
 export function updateAdminProduct(
@@ -154,7 +158,7 @@ export function updateAdminProduct(
     method: 'PUT',
     token,
     body: JSON.stringify(payload),
-  });
+  }).then((product) => normalizeProduct(product));
 }
 
 export function deleteAdminProduct(token: string, productId: string) {
@@ -188,7 +192,7 @@ export function updateAdminOrder(
 
 export function fetchAdminOrderDetails(token: string, orderId: string) {
   return apiRequest<AdminOrderDetailsResponse>(
-    `/api/orders/${encodeURIComponent(orderId)}`,
+    `/api/admin/orders/${encodeURIComponent(orderId)}`,
     { token }
   );
 }

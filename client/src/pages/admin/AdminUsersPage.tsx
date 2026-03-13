@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { useAuth } from '../../contexts/AuthContext';
+import { useSellerAuth } from '../../contexts/SellerAuthContext';
 import { getErrorMessage } from '../../lib/api';
 import {
   fetchAdminUsers,
@@ -42,7 +42,7 @@ function buildPageNumbers(currentPage: number, totalPages: number) {
 }
 
 export function AdminUsersPage() {
-  const { token, user } = useAuth();
+  const { token, seller } = useSellerAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -54,7 +54,7 @@ export function AdminUsersPage() {
   }, [roleFilter, searchTerm]);
 
   useEffect(() => {
-    if (!token || user?.role !== 'admin') {
+    if (!token || !seller) {
       setUsersResponse(EMPTY_USERS);
       setIsLoading(false);
       return;
@@ -89,7 +89,7 @@ export function AdminUsersPage() {
     return () => {
       isCancelled = true;
     };
-  }, [page, roleFilter, searchTerm, token, user?.role]);
+  }, [page, roleFilter, searchTerm, seller, token]);
 
   const pageNumbers = useMemo(
     () => buildPageNumbers(usersResponse.pagination.page, usersResponse.pagination.totalPages),

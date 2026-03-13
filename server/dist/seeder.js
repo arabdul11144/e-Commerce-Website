@@ -51,14 +51,20 @@ const importData = async () => {
         const hashedPassword = await bcryptjs_1.default.hash('admin123', salt);
         const createdUsers = await User_1.default.create([
             {
+                firstName: 'Admin',
+                lastName: 'User',
                 name: 'Admin User',
                 email: 'admin@example.com',
+                phone: '+94770000001',
                 password: hashedPassword,
                 role: 'admin',
             },
             {
+                firstName: 'John',
+                lastName: 'Doe',
                 name: 'John Doe',
                 email: 'john@example.com',
+                phone: '+94770000002',
                 password: await bcryptjs_1.default.hash('user123', salt),
                 role: 'user',
             }

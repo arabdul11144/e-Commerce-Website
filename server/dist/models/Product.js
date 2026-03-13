@@ -36,11 +36,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const ProductSchema = new mongoose_1.Schema({
     id: { type: String, unique: true, sparse: true },
+    seller: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Seller' },
     name: { type: String, required: true },
     slug: { type: String, required: true, unique: true },
     sku: { type: String, required: true },
     brand: { type: String, required: true },
-    category: { type: String, enum: ['Laptops', 'Accessories'], required: true },
+    category: {
+        type: String,
+        enum: ['Laptops', 'Accessories'],
+        required: true,
+    },
     subcategory: { type: String },
     price: { type: Number, required: true },
     discountPrice: { type: Number },
@@ -57,10 +62,11 @@ const ProductSchema = new mongoose_1.Schema({
     toJSON: {
         virtuals: true,
         transform: (_doc, ret) => {
-            // If the document has a custom 'id' field (from seed data), use it
-            // Otherwise fall back to _id.toString()
             if (!ret.id || ret.id === ret._id?.toString()) {
                 ret.id = ret._id?.toString();
+            }
+            if (ret.seller && typeof ret.seller?.toString === 'function') {
+                ret.sellerId = ret.seller.toString();
             }
             delete ret._id;
             delete ret.__v;

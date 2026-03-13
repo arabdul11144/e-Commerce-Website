@@ -2,6 +2,7 @@ import mongoose, { Schema, type Document } from 'mongoose';
 
 export interface IProduct extends Document {
   id?: string;
+  seller?: mongoose.Types.ObjectId;
   name: string;
   slug: string;
   sku: string;
@@ -25,6 +26,7 @@ export interface IProduct extends Document {
 const ProductSchema = new Schema<IProduct>(
   {
     id: { type: String, unique: true, sparse: true },
+    seller: { type: Schema.Types.ObjectId, ref: 'Seller' },
     name: { type: String, required: true },
     slug: { type: String, required: true, unique: true },
     sku: { type: String, required: true },
@@ -53,6 +55,10 @@ const ProductSchema = new Schema<IProduct>(
       transform: (_doc, ret: any) => {
         if (!ret.id || ret.id === ret._id?.toString()) {
           ret.id = ret._id?.toString();
+        }
+
+        if (ret.seller && typeof ret.seller?.toString === 'function') {
+          ret.sellerId = ret.seller.toString();
         }
 
         delete ret._id;

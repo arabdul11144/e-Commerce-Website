@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { AdminLayout } from './components/admin/AdminLayout';
+import { SellerRouteGuard } from './components/admin/SellerRouteGuard';
 import { Home } from './pages/Home';
 import { Shop } from './pages/Shop';
 import { ProductDetails } from './pages/ProductDetails';
@@ -10,13 +11,14 @@ import { Auth } from './pages/Auth';
 import { Wishlist } from './pages/Wishlist';
 import { OrderSuccess } from './pages/OrderSuccess';
 import { Account } from './pages/Account';
+import { SellerAuth } from './pages/SellerAuth';
 import { SearchResults } from './pages/SearchResults';
 import { NotFound } from './pages/NotFound';
 // Admin Pages
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminProductsPage } from './pages/admin/AdminProductsPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
-import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { SellerAccountPage } from './pages/admin/SellerAccountPage';
 export function App() {
   return (
     <Router>
@@ -33,15 +35,25 @@ export function App() {
           <Route path="wishlist" element={<Wishlist />} />
           <Route path="account" element={<Account />} />
           <Route path="auth" element={<Auth />} />
+          <Route path="seller/auth" element={<SellerAuth />} />
+          <Route path="seller/login" element={<SellerAuth initialMode="login" />} />
+          <Route path="seller/register" element={<SellerAuth initialMode="register" />} />
           <Route path="*" element={<NotFound />} />
         </Route>
 
         {/* Admin Routes */}
-        <Route path="/admin" element={<AdminLayout />}>
+        <Route
+          path="/admin"
+          element={
+            <SellerRouteGuard>
+              <AdminLayout />
+            </SellerRouteGuard>
+          }
+        >
           <Route index element={<AdminDashboard />} />
+          <Route path="account" element={<SellerAccountPage />} />
           <Route path="products" element={<AdminProductsPage />} />
           <Route path="orders" element={<AdminOrdersPage />} />
-          <Route path="users" element={<AdminUsersPage />} />
           {/* Placeholder routes for disabled items */}
           <Route
             path="coupons"

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { useAuth } from '../../contexts/AuthContext';
+import { useSellerAuth } from '../../contexts/SellerAuthContext';
 import { getErrorMessage } from '../../lib/api';
 import {
   fetchAdminOrderDetails,
@@ -104,7 +104,7 @@ function downloadCsv(rows: AdminOrderRow[]) {
 }
 
 export function AdminOrdersPage() {
-  const { token, user } = useAuth();
+  const { token, seller } = useSellerAuth();
   const [activeTab, setActiveTab] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -126,7 +126,7 @@ export function AdminOrdersPage() {
   }, [activeTab, paymentFilter, searchTerm]);
 
   useEffect(() => {
-    if (!token || user?.role !== 'admin') {
+    if (!token || !seller) {
       setOrdersResponse(EMPTY_ORDERS);
       setIsLoading(false);
       return;
@@ -162,7 +162,7 @@ export function AdminOrdersPage() {
     return () => {
       isCancelled = true;
     };
-  }, [activeTab, page, paymentFilter, searchTerm, token, user?.role]);
+  }, [activeTab, page, paymentFilter, searchTerm, seller, token]);
 
   const paymentFilterLabel = useMemo(() => {
     switch (paymentFilter) {

@@ -1,4 +1,5 @@
 import type { Product } from '../types';
+import { resolveApiUrl } from '../lib/api';
 
 type ProductInput = Partial<Product> & {
   _id?: string;
@@ -14,11 +15,15 @@ export function normalizeProduct(product: ProductInput): Product {
   const images = Array.isArray(product.images)
     ? product.images.filter(
         (image): image is string => typeof image === 'string' && image.length > 0
-      )
+      ).map((image) => resolveApiUrl(image))
     : [];
 
   return {
     id: String(product.id ?? product._id ?? ''),
+    sellerId:
+      typeof (product as ProductInput & { sellerId?: unknown }).sellerId === 'string'
+        ? (product as ProductInput & { sellerId?: string }).sellerId
+        : undefined,
     name: product.name ?? '',
     slug: product.slug ?? '',
     sku: product.sku ?? '',

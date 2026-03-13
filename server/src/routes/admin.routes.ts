@@ -5,24 +5,25 @@ import {
   getUsers,
   updateUser,
   getOrders,
+  getOrderDetails,
   updateOrderStatus,
   createProduct,
   updateProduct,
   deleteProduct,
 } from '../controllers/admin.controller';
-import { protect } from '../middlewares/auth.middleware';
-import { admin } from '../middlewares/admin.middleware';
+import { sellerProtect } from '../middlewares/sellerAuth.middleware';
 
 const router = express.Router();
 
-router.get('/stats', protect, admin, getStats);
-router.get('/products', protect, admin, getProducts);
-router.get('/users', protect, admin, getUsers);
-router.put('/users/:id', protect, admin, updateUser);
-router.get('/orders', protect, admin, getOrders);
-router.put('/orders/:id', protect, admin, updateOrderStatus);
-router.post('/products', protect, admin, createProduct);
-router.put('/products/:id', protect, admin, updateProduct);
-router.delete('/products/:id', protect, admin, deleteProduct);
+router.get('/stats', sellerProtect, getStats);
+router.get('/products', sellerProtect, getProducts);
+router.get('/users', sellerProtect, getUsers);
+router.put('/users/:id', sellerProtect, updateUser);
+router.get('/orders', sellerProtect, getOrders);
+router.get('/orders/:id', sellerProtect, getOrderDetails);
+router.put('/orders/:id', sellerProtect, updateOrderStatus);
+router.post('/products', sellerProtect, createProduct);
+router.put('/products/:id', sellerProtect, updateProduct);
+router.delete('/products/:id', sellerProtect, deleteProduct);
 
 export default router;

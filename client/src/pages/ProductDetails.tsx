@@ -5,15 +5,19 @@ import {
   Star,
   ShoppingCart,
   Heart,
+  MessageSquareMore,
   ShieldCheck,
   Truck,
   ArrowLeft,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import { getErrorMessage } from '../lib/api';
+import { sendSellerMessage } from '../lib/messages';
 import { fetchProductBySlug } from '../lib/products';
 import { getProductRatingMeta } from '../utils/product';
 import { Button } from '../components/ui/Button';
@@ -25,8 +29,12 @@ export function ProductDetails() {
   const [isLoading, setIsLoading] = useState(true);
   const { addToCart, isMutating: isCartMutating } = useCart();
   const { isFavorite, isMutating, toggleWishlist } = useWishlist();
+  const { token, isAuthenticated } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
+  const [isMessageModalOpen, setIsMessageModalOpen] = useState(false);
+  const [sellerMessage, setSellerMessage] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   useEffect(() => {
     if (!slug) {
@@ -85,6 +93,60 @@ export function ProductDetails() {
 
   const handleWishlist = async () => {
     await toggleWishlist(product);
+  };
+
+  const openSellerMessageModal = () => {
+    if (!product.sellerId) {
+      toast.error('Seller information is not available for this product');
+      return;
+    }
+
+    if (!isAuthenticated || !token) {
+      toast.error('Sign in to message the seller');
+      return;
+    }
+
+    setIsMessageModalOpen(true);
+  };
+
+  const closeSellerMessageModal = () => {
+    if (isSendingMessage) {
+      return;
+    }
+
+    setIsMessageModalOpen(false);
+    setSellerMessage('');
+  };
+
+  const resetSellerMessageModal = () => {
+    setIsMessageModalOpen(false);
+    setSellerMessage('');
+  };
+
+  const handleSellerMessageSubmit = async () => {
+    if (!token || !product.sellerId) {
+      return;
+    }
+
+    if (!sellerMessage.trim()) {
+      toast.error('Please enter a message for the seller');
+      return;
+    }
+
+    try {
+      setIsSendingMessage(true);
+      await sendSellerMessage(token, {
+        sellerId: product.sellerId,
+        productId: product.id,
+        message: sellerMessage.trim(),
+      });
+      toast.success('Message sent to seller');
+      resetSellerMessageModal();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setIsSendingMessage(false);
+    }
   };
 
   return (
@@ -267,6 +329,19 @@ export function ProductDetails() {
                 />
               </Button>
             </div>
+
+            {product.sellerId && (
+              <div className="pt-4 mt-4 border-t border-subtle/30">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  leftIcon={<MessageSquareMore className="w-5 h-5" />}
+                  onClick={openSellerMessageModal}
+                >
+                  Message Seller
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Extra Info */}
@@ -304,6 +379,53 @@ export function ProductDetails() {
           </div>
         </div>
       </div>
+
+      {isMessageModalOpen && (
+        <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center px-4 py-6">
+          <div className="w-full max-w-xl rounded-2xl border border-subtle/30 bg-surface shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-subtle/30">
+              <div>
+                <h2 className="text-xl font-bold text-primary">Message Seller</h2>
+                <p className="text-sm text-muted mt-1">
+                  Send a product-specific message for {product.name}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSellerMessageModal}
+                disabled={isSendingMessage}
+                className="p-2 rounded-lg text-muted hover:text-primary hover:bg-elevated transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <textarea
+                value={sellerMessage}
+                onChange={(event) => setSellerMessage(event.target.value)}
+                rows={6}
+                placeholder="Write your message to the seller..."
+                className="w-full bg-surface border border-subtle/50 rounded-lg text-primary px-4 py-3 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue transition-all"
+              />
+            </div>
+
+            <div className="px-6 py-5 border-t border-subtle/30 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeSellerMessageModal}
+                disabled={isSendingMessage}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleSellerMessageSubmit} isLoading={isSendingMessage}>
+                Send Message
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

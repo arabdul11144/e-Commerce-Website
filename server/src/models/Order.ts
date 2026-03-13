@@ -3,6 +3,8 @@ import { IProduct } from './Product';
 
 export interface IOrderItem {
   product: IProduct['_id'];
+  seller?: mongoose.Types.ObjectId;
+  price?: number;
   quantity: number;
 }
 
@@ -30,6 +32,8 @@ export interface IOrder extends Document {
 
 const OrderItemSchema: Schema = new Schema({
   product: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+  seller: { type: Schema.Types.ObjectId, ref: 'Seller' },
+  price: { type: Number, min: 0 },
   quantity: { type: Number, required: true, min: 1 },
 });
 
