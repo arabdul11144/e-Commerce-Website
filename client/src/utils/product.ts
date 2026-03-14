@@ -1,4 +1,4 @@
-import type { Product, ProductType } from '../types';
+﻿import type { Product, ProductType } from '../types';
 import { resolveApiUrl } from '../lib/api';
 
 type ProductInput = Partial<Product> & {
@@ -94,6 +94,28 @@ export function matchesProductCategory(product: Pick<Product, 'category'>, categ
   }
 
   return normalizedProductCategory === normalizedCategory;
+}
+
+export function matchesProductSearch(
+  product: Pick<
+    Product,
+    'name' | 'brand' | 'category' | 'shortDescription' | 'fullDescription'
+  >,
+  query: unknown
+) {
+  const normalizedQuery = String(query ?? '').trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return [
+    product.name,
+    product.brand,
+    product.category,
+    product.shortDescription,
+    product.fullDescription,
+  ].some((value) => String(value ?? '').toLowerCase().includes(normalizedQuery));
 }
 
 export function getCategoryLabel(category: unknown) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Filter, ChevronDown, Check } from 'lucide-react';
@@ -10,6 +10,7 @@ import {
   getCategoryLabel,
   isBestDealProduct,
   matchesProductCategory,
+  matchesProductSearch,
   normalizeCategoryValue,
 } from '../utils/product';
 import { Button } from '../components/ui/Button';
@@ -35,6 +36,7 @@ export function Shop() {
   const categoryParam = searchParams.get('category') || '';
   const normalizedCategory = normalizeCategoryValue(categoryParam);
   const dealsParam = searchParams.get('deals');
+  const searchQuery = searchParams.get('q') || '';
 
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,6 +96,10 @@ export function Shop() {
         return false;
       }
 
+      if (!matchesProductSearch(product, searchQuery)) {
+        return false;
+      }
+
       if (selectedBrands.length > 0 && !selectedBrands.includes(product.brand)) {
         return false;
       }
@@ -134,7 +140,16 @@ export function Shop() {
       default:
         return sorted.sort((a, b) => Number(b.featured) - Number(a.featured));
     }
-  }, [categoryParam, dealsParam, maxPriceInput, minPriceInput, products, selectedBrands, sortBy]);
+  }, [
+    categoryParam,
+    dealsParam,
+    maxPriceInput,
+    minPriceInput,
+    products,
+    searchQuery,
+    selectedBrands,
+    sortBy,
+  ]);
 
   const clearFilters = () => {
     setSelectedBrands([]);

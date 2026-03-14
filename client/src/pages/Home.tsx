@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+﻿import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowRight,
@@ -15,7 +15,7 @@ import type { Product } from '../types';
 import { Button } from '../components/ui/Button';
 import { ProductCard } from '../components/ProductCard';
 import { apiRequest, getErrorMessage } from '../lib/api';
-import { normalizeProduct, formatCurrency } from '../utils/product';
+import { formatCurrency, matchesProductSearch, normalizeProduct } from '../utils/product';
 import { AnnouncementBar } from '../components/home/AnnouncementBar';
 import { TopBrands } from '../components/home/TopBrands';
 import { BestDeals } from '../components/home/BestDeals';
@@ -88,7 +88,7 @@ function HeroCommerceAnimation() {
           <div className="space-y-4">
             {[
               {
-                name: 'MacBook Pro 16\"',
+                name: 'MacBook Pro 16"',
                 meta: 'In cart',
                 price: formatCurrency(3499),
               },
@@ -197,6 +197,8 @@ function HeroCommerceAnimation() {
 }
 
 export function Home() {
+  const [searchParams] = useSearchParams();
+  const searchQuery = searchParams.get('q') || '';
   const [products, setProducts] = useState<Product[]>([]);
   const [allProductsPage, setAllProductsPage] = useState(1);
 
@@ -227,21 +229,30 @@ export function Home() {
 
   useEffect(() => {
     setAllProductsPage(1);
-  }, [products.length]);
+  }, [products.length, searchQuery]);
+
+  const searchableProducts = useMemo(
+    () => products.filter((product) => matchesProductSearch(product, searchQuery)),
+    [products, searchQuery]
+  );
+  const hasActiveSearch = searchQuery.trim().length > 0;
 
   const laptopProducts = useMemo(
-    () => products.filter((product) => matchesCategory(product, 'laptops')),
-    [products]
+    () => searchableProducts.filter((product) => matchesCategory(product, 'laptops')),
+    [searchableProducts]
   );
 
   const accessoryProducts = useMemo(
-    () => products.filter((product) => matchesCategory(product, 'accessories')),
-    [products]
+    () => searchableProducts.filter((product) => matchesCategory(product, 'accessories')),
+    [searchableProducts]
   );
 
-  const allProductsTotalPages = Math.max(1, Math.ceil(products.length / ALL_PRODUCTS_PAGE_SIZE));
+  const allProductsTotalPages = Math.max(
+    1,
+    Math.ceil(searchableProducts.length / ALL_PRODUCTS_PAGE_SIZE)
+  );
   const allProductsStartIndex = (allProductsPage - 1) * ALL_PRODUCTS_PAGE_SIZE;
-  const visibleAllProducts = products.slice(
+  const visibleAllProducts = searchableProducts.slice(
     allProductsStartIndex,
     allProductsStartIndex + ALL_PRODUCTS_PAGE_SIZE
   );
@@ -458,7 +469,7 @@ export function Home() {
             </div>
           </motion.div>
 
-          <BestDeals products={products} withinContainer />
+          <BestDeals products={searchableProducts} withinContainer />
         </section>
 
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
@@ -496,11 +507,12 @@ export function Home() {
             </motion.div>
           ) : (
             <div className="rounded-2xl border border-subtle/30 bg-surface p-8 text-center text-muted">
-              Laptop products will appear here when they are available.
+              {hasActiveSearch
+                ? `No laptop products match "${searchQuery.trim()}".`
+                : 'Laptop products will appear here when they are available.'}
             </div>
           )}
         </section>
-
 
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="flex items-end justify-between mb-10">
@@ -539,11 +551,12 @@ export function Home() {
             </motion.div>
           ) : (
             <div className="rounded-2xl border border-subtle/30 bg-surface p-8 text-center text-muted">
-              Accessory products will appear here when they are available.
+              {hasActiveSearch
+                ? `No accessory products match "${searchQuery.trim()}".`
+                : 'Accessory products will appear here when they are available.'}
             </div>
           )}
         </section>
-
 
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="flex items-end justify-between gap-4 mb-10">
@@ -572,7 +585,7 @@ export function Home() {
               {allProductsTotalPages > 1 && (
                 <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-body">
-                    Showing {allProductsStartIndex + 1}-{allProductsStartIndex + visibleAllProducts.length} of {products.length} products
+                    Showing {allProductsStartIndex + 1}-{allProductsStartIndex + visibleAllProducts.length} of {searchableProducts.length} products
                   </p>
                   <div className="flex items-center gap-3">
                     <Button
@@ -602,7 +615,9 @@ export function Home() {
             </>
           ) : (
             <div className="rounded-2xl border border-subtle/30 bg-surface p-8 text-center text-muted">
-              Products will appear here when they are available.
+              {hasActiveSearch
+                ? `No products match "${searchQuery.trim()}".`
+                : 'Products will appear here when they are available.'}
             </div>
           )}
         </section>
@@ -614,7 +629,3 @@ export function Home() {
     </>
   );
 }
-
-
-
-
