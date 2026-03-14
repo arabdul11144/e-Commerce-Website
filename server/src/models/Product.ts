@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from 'mongoose';
 
+export type ProductType = 'normal' | 'featured' | 'sale';
+
 export interface IProduct extends Document {
   id?: string;
   seller?: mongoose.Types.ObjectId;
@@ -17,6 +19,7 @@ export interface IProduct extends Document {
   images: string[];
   specifications: Record<string, string>;
   featured?: boolean;
+  productType?: ProductType;
   rating: number;
   reviewsCount: number;
   createdAt: Date;
@@ -45,6 +48,11 @@ const ProductSchema = new Schema<IProduct>(
     images: [{ type: String }],
     specifications: { type: Schema.Types.Mixed, default: {} },
     featured: { type: Boolean, default: false },
+    productType: {
+      type: String,
+      enum: ['normal', 'featured', 'sale'],
+      default: 'normal',
+    },
     rating: { type: Number, default: 0 },
     reviewsCount: { type: Number, default: 0 },
   },

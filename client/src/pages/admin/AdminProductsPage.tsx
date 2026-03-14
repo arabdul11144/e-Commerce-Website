@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit, Trash2, Filter } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Plus, Search, Edit, Trash2, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'sonner';
 import type { Product } from '../../types';
 import { useSellerAuth } from '../../contexts/SellerAuthContext';
@@ -20,6 +20,7 @@ import {
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
+import { formatCurrency } from '../../utils/product';
 
 const EMPTY_PRODUCTS: AdminProductsResponse = {
   items: [],
@@ -38,6 +39,10 @@ const EMPTY_PRODUCTS: AdminProductsResponse = {
     hasNextPage: false,
   },
 };
+
+const LOW_STOCK_THRESHOLD = 10;
+
+type ProductStatFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock';
 
 function buildPageNumbers(currentPage: number, totalPages: number) {
   const maxButtons = Math.min(3, totalPages);
@@ -72,6 +77,48 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+function filterProductsByStat(products: Product[], filter: ProductStatFilter) {
+  switch (filter) {
+    case 'in-stock':
+      return products.filter((product) => product.stock > 0);
+    case 'low-stock':
+      return products.filter(
+        (product) => product.stock > 0 && product.stock < LOW_STOCK_THRESHOLD
+      );
+    case 'out-of-stock':
+      return products.filter((product) => product.stock <= 0);
+    case 'all':
+    default:
+      return products;
+  }
+}
+
+function getStatModalTitle(filter: ProductStatFilter) {
+  switch (filter) {
+    case 'in-stock':
+      return 'In Stock Products';
+    case 'low-stock':
+      return 'Low Stock Products';
+    case 'out-of-stock':
+      return 'Out of Stock Products';
+    case 'all':
+    default:
+      return 'All Products';
+  }
+}
+
+function getStockBadge(product: Product) {
+  if (product.stock <= 0) {
+    return <Badge variant="error">Out of Stock</Badge>;
+  }
+
+  if (product.stock < LOW_STOCK_THRESHOLD) {
+    return <Badge variant="warning">Low Stock</Badge>;
+  }
+
+  return <Badge variant="success">In Stock</Badge>;
+}
+
 export function AdminProductsPage() {
   const { token, seller } = useSellerAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -83,6 +130,12 @@ export function AdminProductsPage() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+  const [allProducts, setAllProducts] = useState<Product[] | null>(null);
+  const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
+  const [selectedStatFilter, setSelectedStatFilter] =
+    useState<ProductStatFilter>('all');
+  const [statProducts, setStatProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     setPage(1);
@@ -137,6 +190,7 @@ export function AdminProductsPage() {
     }
 
     setIsLoading(true);
+    setAllProducts(null);
 
     try {
       const response = await fetchAdminProducts(token, {
@@ -195,17 +249,17 @@ export function AdminProductsPage() {
       category: values.category,
       price: values.price,
       stock: values.stock,
-      shortDescription: values.shortDescription,
+      shortDescription: values.fullDescription,
       fullDescription: values.fullDescription,
       slug: product?.slug || `${baseSlug}-${uniqueSuffix}`,
       sku: product?.sku || `SKU-${uniqueSuffix}`,
       images: values.existingImages,
       specifications: values.specifications,
-      featured: values.featured,
+      featured: values.productType === 'featured',
+      productType: values.productType,
       rating: product?.rating || 0,
       reviewsCount: product?.reviewsCount || 0,
       discountPrice: values.discountPrice,
-      subcategory: values.subcategory || undefined,
     };
   };
 
@@ -273,10 +327,69 @@ export function AdminProductsPage() {
     }
   };
 
-  const clearFilters = () => {
-    setSearchTerm('');
-    setCategoryFilter('All Categories');
+  const openStatsModal = async (filter: ProductStatFilter) => {
+    setSelectedStatFilter(filter);
+    setIsStatsModalOpen(true);
+
+    if (!token) {
+      setStatProducts([]);
+      return;
+    }
+
+    if (allProducts) {
+      setStatProducts(filterProductsByStat(allProducts, filter));
+      return;
+    }
+
+    setIsStatsLoading(true);
+
+    try {
+      const response = await fetchAdminProducts(token, {
+        page: 1,
+        limit: Math.max(productsResponse.summary.totalProducts, 1),
+      });
+
+      setAllProducts(response.items);
+      setStatProducts(filterProductsByStat(response.items, filter));
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+      setStatProducts([]);
+    } finally {
+      setIsStatsLoading(false);
+    }
   };
+
+  const closeStatsModal = () => {
+    setIsStatsModalOpen(false);
+    setSelectedStatFilter('all');
+  };
+
+  const statCards = [
+    {
+      key: 'all' as const,
+      title: 'Total Products',
+      value: productsResponse.summary.totalProducts,
+      valueClassName: 'text-primary',
+    },
+    {
+      key: 'in-stock' as const,
+      title: 'In Stock',
+      value: productsResponse.summary.inStock,
+      valueClassName: 'text-status-success',
+    },
+    {
+      key: 'low-stock' as const,
+      title: 'Low Stock',
+      value: productsResponse.summary.lowStock,
+      valueClassName: 'text-status-warning',
+    },
+    {
+      key: 'out-of-stock' as const,
+      title: 'Out of Stock',
+      value: productsResponse.summary.outOfStock,
+      valueClassName: 'text-status-error',
+    },
+  ];
 
   return (
     <div className="space-y-8">
@@ -295,30 +408,22 @@ export function AdminProductsPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <p className="text-sm text-muted font-medium">Total Products</p>
-          <p className="text-2xl font-bold text-primary mt-1">
-            {productsResponse.summary.totalProducts}
-          </p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted font-medium">In Stock</p>
-          <p className="text-2xl font-bold text-status-success mt-1">
-            {productsResponse.summary.inStock}
-          </p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted font-medium">Low Stock</p>
-          <p className="text-2xl font-bold text-status-warning mt-1">
-            {productsResponse.summary.lowStock}
-          </p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted font-medium">Out of Stock</p>
-          <p className="text-2xl font-bold text-status-error mt-1">
-            {productsResponse.summary.outOfStock}
-          </p>
-        </Card>
+        {statCards.map((stat) => (
+          <button
+            key={stat.key}
+            type="button"
+            onClick={() => openStatsModal(stat.key)}
+            className="w-full text-left"
+            aria-haspopup="dialog"
+          >
+            <Card className="p-4 h-full transition-colors hover:bg-elevated/30 hover:border-accent-blue/30">
+              <p className="text-sm text-muted font-medium">{stat.title}</p>
+              <p className={`text-2xl font-bold mt-1 ${stat.valueClassName}`}>
+                {stat.value}
+              </p>
+            </Card>
+          </button>
+        ))}
       </div>
 
       <Card className="p-4 flex flex-col sm:flex-row gap-4 justify-between items-center">
@@ -332,25 +437,15 @@ export function AdminProductsPage() {
             className="w-full bg-background border border-subtle/50 rounded-lg py-2 pl-9 pr-4 text-sm text-primary focus:outline-none focus:border-accent-blue transition-colors"
           />
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          <Button
-            variant="outline"
-            leftIcon={<Filter className="w-4 h-4" />}
-            className="flex-1 sm:flex-none"
-            onClick={clearFilters}
-          >
-            Filter
-          </Button>
-          <select
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
-            className="bg-background border border-subtle/50 rounded-lg py-2 px-4 text-sm text-primary focus:outline-none focus:border-accent-blue transition-colors flex-1 sm:flex-none"
-          >
-            <option>All Categories</option>
-            <option>Laptops</option>
-            <option>Accessories</option>
-          </select>
-        </div>
+        <select
+          value={categoryFilter}
+          onChange={(event) => setCategoryFilter(event.target.value)}
+          className="bg-background border border-subtle/50 rounded-lg py-2 px-4 text-sm text-primary focus:outline-none focus:border-accent-blue transition-colors w-full sm:w-auto"
+        >
+          <option>All Categories</option>
+          <option>Laptops</option>
+          <option>Accessories</option>
+        </select>
       </Card>
 
       <Card className="overflow-hidden">
@@ -406,26 +501,21 @@ export function AdminProductsPage() {
                     </td>
                     <td className="p-4">
                       <span className="text-sm text-body">{product.category}</span>
-                      {product.subcategory && (
-                        <span className="text-xs text-muted block mt-0.5">
-                          {product.subcategory}
-                        </span>
-                      )}
                     </td>
                     <td className="p-4">
                       <div className="flex flex-col">
                         {product.discountPrice ? (
                           <>
                             <span className="text-sm font-medium text-primary">
-                              ${product.discountPrice.toLocaleString()}
+                              {formatCurrency(product.discountPrice)}
                             </span>
                             <span className="text-xs text-muted line-through">
-                              ${product.price.toLocaleString()}
+                              {formatCurrency(product.price)}
                             </span>
                           </>
                         ) : (
                           <span className="text-sm font-medium text-primary">
-                            ${product.price.toLocaleString()}
+                            {formatCurrency(product.price)}
                           </span>
                         )}
                       </div>
@@ -435,7 +525,7 @@ export function AdminProductsPage() {
                         className={`text-sm font-medium ${
                           product.stock === 0
                             ? 'text-status-error'
-                            : product.stock < 10
+                            : product.stock < LOW_STOCK_THRESHOLD
                             ? 'text-status-warning'
                             : 'text-primary'
                         }`}
@@ -443,11 +533,7 @@ export function AdminProductsPage() {
                         {product.stock}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <Badge variant={product.stock > 0 ? 'success' : 'error'}>
-                        {product.stock > 0 ? 'Active' : 'Out of Stock'}
-                      </Badge>
-                    </td>
+                    <td className="p-4">{getStockBadge(product)}</td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -512,6 +598,87 @@ export function AdminProductsPage() {
           </div>
         </div>
       </Card>
+
+      <AnimatePresence>
+        {isStatsModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center px-4 py-6"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.98 }}
+              className="w-full max-w-4xl max-h-[85vh] overflow-hidden rounded-2xl border border-subtle/30 bg-surface shadow-2xl shadow-black/50"
+            >
+              <div className="flex items-center justify-between px-6 py-5 border-b border-subtle/30">
+                <div>
+                  <h2 className="text-xl font-bold text-primary">
+                    {getStatModalTitle(selectedStatFilter)}
+                  </h2>
+                  <p className="text-sm text-muted mt-1">
+                    Showing {statProducts.length} product{statProducts.length === 1 ? '' : 's'}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeStatsModal}
+                  className="p-2 rounded-lg text-muted hover:text-primary hover:bg-elevated transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="max-h-[calc(85vh-84px)] overflow-y-auto custom-scrollbar p-6 space-y-4">
+                {isStatsLoading && (
+                  <div className="py-12 text-center text-muted">Loading products...</div>
+                )}
+
+                {!isStatsLoading && statProducts.length === 0 && (
+                  <div className="py-12 text-center text-muted">
+                    No products match this status right now.
+                  </div>
+                )}
+
+                {!isStatsLoading &&
+                  statProducts.map((product) => (
+                    <Card key={product.id} className="p-4">
+                      <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="w-16 h-16 rounded-xl bg-background border border-subtle/30 overflow-hidden flex-shrink-0">
+                            <img
+                              src={product.images[0] ?? ''}
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-base font-semibold text-primary line-clamp-1">
+                              {product.name}
+                            </p>
+                            <p className="text-sm text-muted">{product.brand}</p>
+                            <p className="text-sm text-body mt-1">{product.category}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:items-end gap-2">
+                          <div className="text-sm font-medium text-primary">
+                            {product.discountPrice ? formatCurrency(product.discountPrice) : formatCurrency(product.price)}
+                          </div>
+                          <div className="text-sm text-body">Stock: {product.stock}</div>
+                          {getStockBadge(product)}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <ProductFormModal
         isOpen={isProductModalOpen}
         mode={selectedProduct ? 'edit' : 'add'}
@@ -523,3 +690,4 @@ export function AdminProductsPage() {
     </div>
   );
 }
+

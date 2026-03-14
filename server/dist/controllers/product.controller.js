@@ -5,10 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getProductById = exports.getProductBySlug = exports.getProducts = void 0;
 const Product_1 = __importDefault(require("../models/Product"));
+const CUSTOMER_VISIBLE_STOCK_FILTER = { $gt: 0 };
 const getProducts = async (req, res) => {
     try {
         const { q, category, brand, minPrice, maxPrice, sort, featured } = req.query;
-        const filter = {};
+        const filter = {
+            stock: CUSTOMER_VISIBLE_STOCK_FILTER,
+        };
         if (q && typeof q === 'string') {
             const regex = new RegExp(q, 'i');
             filter.$or = [{ name: regex }, { brand: regex }, { category: regex }];
@@ -59,7 +62,10 @@ const getProducts = async (req, res) => {
 exports.getProducts = getProducts;
 const getProductBySlug = async (req, res) => {
     try {
-        const product = await Product_1.default.findOne({ slug: req.params.slug });
+        const product = await Product_1.default.findOne({
+            slug: req.params.slug,
+            stock: CUSTOMER_VISIBLE_STOCK_FILTER,
+        });
         if (product) {
             res.json(product);
         }
@@ -74,7 +80,10 @@ const getProductBySlug = async (req, res) => {
 exports.getProductBySlug = getProductBySlug;
 const getProductById = async (req, res) => {
     try {
-        const product = await Product_1.default.findById(req.params.id);
+        const product = await Product_1.default.findOne({
+            _id: req.params.id,
+            stock: CUSTOMER_VISIBLE_STOCK_FILTER,
+        });
         if (product) {
             res.json(product);
         }

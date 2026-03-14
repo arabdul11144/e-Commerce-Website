@@ -10,7 +10,6 @@ import {
   MapPin,
   User,
   Lock,
-  Store,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSellerAuth } from '../contexts/SellerAuthContext';
@@ -144,8 +143,8 @@ export function SellerAuth({ initialMode = 'login' }: { initialMode?: 'login' | 
         className="w-full max-w-2xl bg-surface border border-subtle/30 rounded-2xl p-8 shadow-2xl shadow-black/50"
       >
         <div className="flex justify-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-accent-gold flex items-center justify-center text-background">
-            <Store className="w-7 h-7" />
+          <div className="w-12 h-12 rounded-xl bg-accent-gold flex items-center justify-center overflow-hidden">
+            <img src="/laplab.png" alt="LapLab logo" className="w-full h-full object-contain" />
           </div>
         </div>
 
@@ -179,7 +178,7 @@ export function SellerAuth({ initialMode = 'login' }: { initialMode?: 'login' | 
               >
                 <Input
                   label="Business Name"
-                  placeholder="TechVault Sellers"
+                  placeholder="LapLab Sellers"
                   leftIcon={<Building2 className="w-4 h-4" />}
                   value={formState.businessName}
                   onChange={updateField('businessName')}
@@ -293,3 +292,8 @@ export function SellerAuth({ initialMode = 'login' }: { initialMode?: 'login' | 
     </div>
   );
 }
+
+
+
+
+

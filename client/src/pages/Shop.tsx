@@ -6,6 +6,12 @@ import type { Product } from '../types';
 import { ProductCard } from '../components/ProductCard';
 import { getErrorMessage } from '../lib/api';
 import { fetchProducts } from '../lib/products';
+import {
+  getCategoryLabel,
+  isBestDealProduct,
+  matchesProductCategory,
+  normalizeCategoryValue,
+} from '../utils/product';
 import { Button } from '../components/ui/Button';
 
 type SortOption =
@@ -15,16 +21,27 @@ type SortOption =
   | 'price_high_low'
   | 'top_rated';
 
+function parsePriceInput(value: string) {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+}
+
 export function Shop() {
-  const [searchParams] = useSearchParams();
-  const categoryParam = searchParams.get('category');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const categoryParam = searchParams.get('category') || '';
+  const normalizedCategory = normalizeCategoryValue(categoryParam);
   const dealsParam = searchParams.get('deals');
 
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000]);
+  const [minPriceInput, setMinPriceInput] = useState('');
+  const [maxPriceInput, setMaxPriceInput] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('featured');
 
   useEffect(() => {
@@ -54,33 +71,40 @@ export function Shop() {
     };
   }, []);
 
-  const brands = Array.from(new Set(products.map((p) => p.brand))).filter(Boolean);
+  const brands = Array.from(new Set(products.map((product) => product.brand))).filter(Boolean);
 
   const toggleBrand = (brand: string) => {
-    setSelectedBrands((prev) =>
-      prev.includes(brand)
-        ? prev.filter((b) => b !== brand)
-        : [...prev, brand]
+    setSelectedBrands((currentBrands) =>
+      currentBrands.includes(brand)
+        ? currentBrands.filter((currentBrand) => currentBrand !== brand)
+        : [...currentBrands, brand]
     );
   };
 
   const filteredProducts = useMemo(() => {
-    const result = products.filter((p) => {
-      if (dealsParam === 'true' && !p.discountPrice) return false;
+    const minPrice = parsePriceInput(minPriceInput);
+    const maxPrice = parsePriceInput(maxPriceInput);
 
-      if (
-        categoryParam &&
-        p.category.toLowerCase() !== categoryParam.toLowerCase()
-      ) {
+    const result = products.filter((product) => {
+      if (dealsParam === 'true' && !isBestDealProduct(product)) {
         return false;
       }
 
-      if (selectedBrands.length > 0 && !selectedBrands.includes(p.brand)) {
+      if (!matchesProductCategory(product, categoryParam)) {
         return false;
       }
 
-      const price = p.discountPrice || p.price;
-      if (price < priceRange[0] || price > priceRange[1]) {
+      if (selectedBrands.length > 0 && !selectedBrands.includes(product.brand)) {
+        return false;
+      }
+
+      const productPrice = product.discountPrice ?? product.price;
+
+      if (minPrice !== undefined && productPrice < minPrice) {
+        return false;
+      }
+
+      if (maxPrice !== undefined && productPrice > maxPrice) {
         return false;
       }
 
@@ -110,23 +134,23 @@ export function Shop() {
       default:
         return sorted.sort((a, b) => Number(b.featured) - Number(a.featured));
     }
-  }, [categoryParam, dealsParam, priceRange, products, selectedBrands, sortBy]);
+  }, [categoryParam, dealsParam, maxPriceInput, minPriceInput, products, selectedBrands, sortBy]);
 
   const clearFilters = () => {
     setSelectedBrands([]);
-    setPriceRange([0, 5000]);
+    setMinPriceInput('');
+    setMaxPriceInput('');
     setSortBy('featured');
+    setSearchParams({});
   };
+
+  const pageTitle = dealsParam === 'true' ? 'Best Deals' : getCategoryLabel(normalizedCategory);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-primary mb-4 capitalize">
-          {dealsParam === 'true'
-            ? 'Best Deals'
-            : categoryParam
-            ? categoryParam
-            : 'All Products'}
+          {pageTitle}
         </h1>
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -145,7 +169,7 @@ export function Shop() {
             <div className="relative flex-1 sm:flex-none">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                onChange={(event) => setSortBy(event.target.value as SortOption)}
                 className="w-full appearance-none bg-surface border border-subtle/50 rounded-lg py-2 pl-4 pr-10 text-sm text-primary focus:outline-none focus:border-accent-blue"
               >
                 <option value="featured">Featured</option>
@@ -177,7 +201,7 @@ export function Shop() {
                   <Link
                     to="/shop"
                     className={`text-sm ${
-                      !categoryParam
+                      !normalizedCategory
                         ? 'text-accent-gold font-medium'
                         : 'text-body hover:text-primary'
                     }`}
@@ -190,7 +214,7 @@ export function Shop() {
                   <Link
                     to="/shop?category=laptops"
                     className={`text-sm ${
-                      categoryParam === 'laptops'
+                      normalizedCategory === 'laptops'
                         ? 'text-accent-gold font-medium'
                         : 'text-body hover:text-primary'
                     }`}
@@ -203,7 +227,7 @@ export function Shop() {
                   <Link
                     to="/shop?category=accessories"
                     className={`text-sm ${
-                      categoryParam === 'accessories'
+                      normalizedCategory === 'accessories'
                         ? 'text-accent-gold font-medium'
                         : 'text-body hover:text-primary'
                     }`}
@@ -257,10 +281,8 @@ export function Shop() {
                   <span className="text-xs text-muted mb-1 block">Min</span>
                   <input
                     type="number"
-                    value={priceRange[0]}
-                    onChange={(e) =>
-                      setPriceRange([Number(e.target.value), priceRange[1]])
-                    }
+                    value={minPriceInput}
+                    onChange={(event) => setMinPriceInput(event.target.value)}
                     className="w-full bg-background border border-subtle/50 rounded-md py-1.5 px-3 text-sm text-primary focus:outline-none focus:border-accent-blue"
                   />
                 </div>
@@ -269,14 +291,20 @@ export function Shop() {
                   <span className="text-xs text-muted mb-1 block">Max</span>
                   <input
                     type="number"
-                    value={priceRange[1]}
-                    onChange={(e) =>
-                      setPriceRange([priceRange[0], Number(e.target.value)])
-                    }
+                    value={maxPriceInput}
+                    onChange={(event) => setMaxPriceInput(event.target.value)}
                     className="w-full bg-background border border-subtle/50 rounded-md py-1.5 px-3 text-sm text-primary focus:outline-none focus:border-accent-blue"
                   />
                 </div>
               </div>
+
+              <Button
+                variant="outline"
+                className="w-full mt-6 justify-center"
+                onClick={clearFilters}
+              >
+                Clear all filters
+              </Button>
             </div>
           </div>
         </motion.aside>
@@ -300,7 +328,7 @@ export function Shop() {
               <p className="text-body mb-6">
                 Try adjusting your filters or search criteria.
               </p>
-              <Button onClick={clearFilters}>Clear Filters</Button>
+              <Button onClick={clearFilters}>Clear all filters</Button>
             </div>
           )}
         </div>

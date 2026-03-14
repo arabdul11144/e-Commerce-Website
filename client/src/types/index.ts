@@ -1,3 +1,5 @@
+export type ProductType = 'normal' | 'featured' | 'sale';
+
 export interface Product {
   id: string;
   sellerId?: string;
@@ -15,6 +17,7 @@ export interface Product {
   images: string[];
   specifications: Record<string, string>;
   featured?: boolean;
+  productType?: ProductType;
   rating: number;
   reviewsCount: number;
 }
@@ -53,12 +56,18 @@ export interface SellerMessage {
   id: string;
   message: string;
   isRead: boolean;
+  senderType: 'customer' | 'seller';
   createdAt: string;
   customer: {
     id: string;
     name: string;
     email: string;
   };
+  seller: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
   product: {
     id: string;
     name: string;

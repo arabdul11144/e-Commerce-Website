@@ -6,6 +6,7 @@ import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { formatCurrency } from '../utils/product';
 
 export function Wishlist() {
   const { isAuthenticated } = useAuth();
@@ -118,7 +119,7 @@ export function Wishlist() {
 
                 <div className="mt-auto pt-4 flex items-center justify-between">
                   <span className="text-xl font-bold text-primary">
-                    ${price.toLocaleString()}
+                    {formatCurrency(price)}
                   </span>
 
                   <Button

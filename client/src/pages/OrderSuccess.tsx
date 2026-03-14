@@ -3,25 +3,27 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, Package, Calendar, CreditCard } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { formatCurrency } from '../utils/product';
+
 export function OrderSuccess() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
       <motion.div
         initial={{
           scale: 0,
-          opacity: 0
+          opacity: 0,
         }}
         animate={{
           scale: 1,
-          opacity: 1
+          opacity: 1,
         }}
         transition={{
           type: 'spring',
           stiffness: 200,
-          damping: 20
+          damping: 20,
         }}
-        className="w-24 h-24 bg-status-success/20 rounded-full flex items-center justify-center mx-auto mb-8">
-
+        className="w-24 h-24 bg-status-success/20 rounded-full flex items-center justify-center mx-auto mb-8"
+      >
         <CheckCircle2 className="w-12 h-12 text-status-success" />
       </motion.div>
 
@@ -43,7 +45,7 @@ export function OrderSuccess() {
             <Package className="w-5 h-5 text-accent-blue mt-0.5" />
             <div>
               <p className="text-sm text-muted">Order Number</p>
-              <p className="font-medium text-primary">#TTV-2026-0847</p>
+              <p className="font-medium text-primary">#LPL-2026-0847</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -58,7 +60,10 @@ export function OrderSuccess() {
             <div>
               <p className="text-sm text-muted">Payment Status</p>
               <p className="font-medium text-status-success">
-                Paid ($3,598.00)
+                Paid ({formatCurrency(3598, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })})
               </p>
             </div>
           </div>
@@ -70,8 +75,8 @@ export function OrderSuccess() {
           </span>
           <Link
             to="/account"
-            className="text-accent-gold hover:text-accent-goldHover font-medium text-sm">
-
+            className="text-accent-gold hover:text-accent-goldHover font-medium text-sm"
+          >
             Track Order
           </Link>
         </div>
@@ -89,6 +94,6 @@ export function OrderSuccess() {
           </Button>
         </Link>
       </div>
-    </div>);
-
+    </div>
+  );
 }

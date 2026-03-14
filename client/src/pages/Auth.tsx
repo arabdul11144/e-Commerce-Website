@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Laptop, Mail, Lock, User, Phone } from 'lucide-react';
+import { Mail, Lock, User, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { getErrorMessage } from '../lib/api';
@@ -88,8 +88,8 @@ export function Auth() {
         className="w-full max-w-md bg-surface border border-subtle/30 rounded-2xl p-8 shadow-2xl shadow-black/50"
       >
         <div className="flex justify-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-accent-gold flex items-center justify-center text-background">
-            <Laptop className="w-7 h-7" />
+          <div className="w-12 h-12 rounded-xl bg-accent-gold flex items-center justify-center overflow-hidden">
+            <img src="/laplab.png" alt="LapLab logo" className="w-full h-full object-contain" />
           </div>
         </div>
 
@@ -109,7 +109,7 @@ export function Auth() {
         <p className="text-center text-body mb-8">
           {isLogin
             ? 'Enter your details to access your account.'
-            : 'Join TechVault for a premium experience.'}
+            : 'Join LapLab for a premium experience.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -223,3 +223,5 @@ export function Auth() {
     </div>
   );
 }
+
+

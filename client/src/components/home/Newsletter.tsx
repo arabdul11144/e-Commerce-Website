@@ -1,39 +1,74 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail } from 'lucide-react';
+import { toast } from 'sonner';
+import { apiRequest, getErrorMessage } from '../../lib/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { toast } from 'sonner';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function Newsletter() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const handleSubmit = (e: React.FormEvent) => {
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+      const message = 'Please enter your email address.';
+      setFeedback({ type: 'error', message });
+      toast.error(message);
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      const message = 'Please enter a valid email address.';
+      setFeedback({ type: 'error', message });
+      toast.error(message);
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      toast.success('Successfully subscribed to the newsletter!');
+    setFeedback(null);
+
+    try {
+      const response = await apiRequest<{ message: string }>('/api/auth/newsletter/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+
+      setFeedback({ type: 'success', message: response.message });
+      toast.success(response.message);
       setEmail('');
-    }, 1000);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setFeedback({ type: 'error', message });
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
       <motion.div
         initial={{
           opacity: 0,
-          scale: 0.95
+          scale: 0.95,
         }}
         whileInView={{
           opacity: 1,
-          scale: 1
+          scale: 1,
         }}
         viewport={{
-          once: true
+          once: true,
         }}
-        className="bg-gradient-to-br from-surface to-elevated border border-subtle/30 rounded-3xl p-8 md:p-16 text-center relative overflow-hidden">
-
-        {/* Decorative elements */}
+        className="bg-gradient-to-br from-surface to-elevated border border-subtle/30 rounded-3xl p-8 md:p-16 text-center relative overflow-hidden"
+      >
         <div className="absolute top-0 left-0 w-64 h-64 bg-accent-blue/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-accent-gold/5 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
 
@@ -51,8 +86,8 @@ export function Newsletter() {
 
           <form
             onSubmit={handleSubmit}
-            className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-
+            className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
+          >
             <div className="flex-1">
               <Input
                 type="email"
@@ -60,24 +95,34 @@ export function Newsletter() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full" />
-
+                className="w-full"
+              />
             </div>
             <Button
               type="submit"
               size="lg"
               isLoading={isLoading}
-              className="sm:w-auto">
-
+              className="sm:w-auto"
+            >
               Subscribe
             </Button>
           </form>
+          {feedback && (
+            <p
+              aria-live="polite"
+              className={`mt-4 text-sm ${
+                feedback.type === 'success' ? 'text-status-success' : 'text-status-error'
+              }`}
+            >
+              {feedback.message}
+            </p>
+          )}
           <p className="text-xs text-muted mt-4">
             By subscribing, you agree to our Privacy Policy and consent to
             receive updates.
           </p>
         </div>
       </motion.div>
-    </section>);
-
+    </section>
+  );
 }

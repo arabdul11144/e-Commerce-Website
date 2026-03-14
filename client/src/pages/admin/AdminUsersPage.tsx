@@ -21,6 +21,7 @@ import {
   type AdminUserRow,
   updateAdminUser,
 } from '../../lib/admin';
+import { formatCurrency } from '../../utils/product';
 
 const EMPTY_USERS: AdminUsersResponse = {
   items: [],
@@ -276,9 +277,9 @@ export function AdminUsersPage() {
                     </td>
                     <td className="p-4 text-sm text-body">{item.orders}</td>
                     <td className="p-4 text-sm font-medium text-primary">
-                      $
-                      {item.spent.toLocaleString(undefined, {
+                      {formatCurrency(item.spent, {
                         minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
                       })}
                     </td>
                     <td className="p-4 text-sm text-body">{item.joined}</td>

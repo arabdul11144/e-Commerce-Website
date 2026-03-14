@@ -13,6 +13,7 @@ import {
   type AdminOrderRow,
   type AdminOrdersResponse,
 } from '../../lib/admin';
+import { formatCurrency } from '../../utils/product';
 
 const EMPTY_ORDERS: AdminOrdersResponse = {
   items: [],
@@ -76,7 +77,7 @@ function buildPageNumbers(currentPage: number, totalPages: number) {
 }
 
 function downloadCsv(rows: AdminOrderRow[]) {
-  const header = ['Order ID', 'Customer', 'Email', 'Date', 'Items', 'Total', 'Payment', 'Status'];
+  const header = ['Order ID', 'Customer', 'Email', 'Date', 'Items', 'Total (LKR)', 'Payment', 'Status'];
   const csvRows = rows.map((row) =>
     [
       row.id,
@@ -225,7 +226,10 @@ export function AdminOrdersPage() {
           `Order ID: ${order.id || order._id || orderId}`,
           `Status: ${order.status || 'pending'}`,
           `Payment: ${order.paymentStatus || 'pending'}`,
-          `Total: $${Number(order.total || 0).toFixed(2)}`,
+          `Total: ${formatCurrency(Number(order.total || 0), {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`,
           `Items: ${itemCount}`,
           `Contact: ${order.contactEmail || order.shippingAddress?.fullName || 'N/A'}`,
         ].join('\n')
@@ -323,9 +327,9 @@ export function AdminOrdersPage() {
                     <td className="p-4 text-sm text-body">{order.date}</td>
                     <td className="p-4 text-sm text-body">{order.items} items</td>
                     <td className="p-4 text-sm font-medium text-primary">
-                      $
-                      {order.total.toLocaleString(undefined, {
+                      {formatCurrency(order.total, {
                         minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
                       })}
                     </td>
                     <td className="p-4">{getPaymentBadge(order.payment)}</td>

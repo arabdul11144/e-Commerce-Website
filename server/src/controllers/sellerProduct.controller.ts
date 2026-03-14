@@ -1,6 +1,6 @@
 import { type Response } from 'express';
 import mongoose from 'mongoose';
-import Product from '../models/Product';
+import Product, { type ProductType } from '../models/Product';
 import { type SellerAuthRequest } from '../middlewares/sellerAuth.middleware';
 import {
   isDataImage,
@@ -84,6 +84,32 @@ function normalizeSpecifications(value: unknown) {
   );
 }
 
+function normalizeProductType(
+  value: unknown,
+  featured: boolean,
+  discountPrice: number | undefined,
+  price: number
+): ProductType {
+  if (value === 'featured' || value === 'sale' || value === 'normal') {
+    return value;
+  }
+
+  if (featured) {
+    return 'featured';
+  }
+
+  if (
+    discountPrice !== undefined &&
+    Number.isFinite(discountPrice) &&
+    discountPrice >= 0 &&
+    discountPrice < price
+  ) {
+    return 'sale';
+  }
+
+  return 'normal';
+}
+
 async function normalizeImages(images: unknown, sellerId: string) {
   if (!Array.isArray(images)) {
     return [] as string[];
@@ -121,6 +147,18 @@ async function normalizeImages(images: unknown, sellerId: string) {
 }
 
 function sanitizeProductPayload(payload: Record<string, unknown>, sellerId: string) {
+  const price = normalizePrice(payload.price);
+  const discountPrice =
+    payload.discountPrice === undefined || payload.discountPrice === null || payload.discountPrice === ''
+      ? undefined
+      : normalizePrice(payload.discountPrice);
+  const fullDescription = String(payload.fullDescription || '').trim();
+  const shortDescription = String(
+    payload.shortDescription || fullDescription
+  ).trim();
+  const featured = Boolean(payload.featured);
+  const productType = normalizeProductType(payload.productType, featured, discountPrice, price);
+
   return {
     name: String(payload.name || '').trim(),
     slug: String(payload.slug || '').trim(),
@@ -131,16 +169,14 @@ function sanitizeProductPayload(payload: Record<string, unknown>, sellerId: stri
       | 'Accessories',
     subcategory:
       typeof payload.subcategory === 'string' ? payload.subcategory.trim() : undefined,
-    price: normalizePrice(payload.price),
-    discountPrice:
-      payload.discountPrice === undefined || payload.discountPrice === null || payload.discountPrice === ''
-        ? undefined
-        : normalizePrice(payload.discountPrice),
+    price,
+    discountPrice,
     stock: normalizeStock(payload.stock),
-    shortDescription: String(payload.shortDescription || '').trim(),
-    fullDescription: String(payload.fullDescription || '').trim(),
+    shortDescription,
+    fullDescription,
     specifications: normalizeSpecifications(payload.specifications),
-    featured: Boolean(payload.featured),
+    featured: productType === 'featured',
+    productType,
     rating: normalizePrice(payload.rating),
     reviewsCount: normalizeStock(payload.reviewsCount),
     seller: reqSellerIdPlaceholder(sellerId),
@@ -254,7 +290,6 @@ export const createSellerProduct = async (req: SellerAuthRequest, res: Response)
       !sanitizedPayload.slug ||
       !sanitizedPayload.sku ||
       !sanitizedPayload.brand ||
-      !sanitizedPayload.shortDescription ||
       !sanitizedPayload.fullDescription
     ) {
       res.status(400).json({ message: 'Please provide complete product details' });
@@ -309,6 +344,7 @@ export const updateSellerProduct = async (req: SellerAuthRequest, res: Response)
     product.fullDescription = sanitizedPayload.fullDescription || product.fullDescription;
     product.specifications = sanitizedPayload.specifications;
     product.featured = sanitizedPayload.featured;
+    product.productType = sanitizedPayload.productType;
     product.rating = sanitizedPayload.rating;
     product.reviewsCount = sanitizedPayload.reviewsCount;
     product.images = images;

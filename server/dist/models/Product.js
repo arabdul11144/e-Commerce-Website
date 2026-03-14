@@ -55,6 +55,11 @@ const ProductSchema = new mongoose_1.Schema({
     images: [{ type: String }],
     specifications: { type: mongoose_1.Schema.Types.Mixed, default: {} },
     featured: { type: Boolean, default: false },
+    productType: {
+        type: String,
+        enum: ['normal', 'featured', 'sale'],
+        default: 'normal',
+    },
     rating: { type: Number, default: 0 },
     reviewsCount: { type: Number, default: 0 },
 }, {

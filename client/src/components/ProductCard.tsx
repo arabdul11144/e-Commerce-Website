@@ -4,7 +4,7 @@ import { ShoppingCart, Star, Heart } from 'lucide-react';
 import type { Product } from '../types';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
-import { getProductRatingMeta } from '../utils/product';
+import { formatCurrency, getProductRatingMeta, getProductType } from '../utils/product';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -17,6 +17,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const { addToCart, isMutating: isCartMutating } = useCart();
   const { isFavorite, isMutating, toggleWishlist } = useWishlist();
   const { rating, ratingLabel, reviewsCount } = getProductRatingMeta(product);
+  const productType = getProductType(product);
 
   const imageSources = product.images.filter(Boolean);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -45,8 +46,8 @@ export function ProductCard({ product }: ProductCardProps) {
     <Link to={`/product/${product.slug}`}>
       <Card hoverable className="h-full flex flex-col group relative">
         <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
-          {product.discountPrice && <Badge variant="error">Sale</Badge>}
-          {product.featured && <Badge variant="gold">Featured</Badge>}
+          {productType === 'featured' && <Badge variant="gold">Featured</Badge>}
+          {productType === 'sale' && <Badge variant="blue">Sale</Badge>}
         </div>
 
         <div className="aspect-[4/3] overflow-hidden bg-elevated">
@@ -88,15 +89,15 @@ export function ProductCard({ product }: ProductCardProps) {
               {product.discountPrice ? (
                 <div className="flex flex-col">
                   <span className="text-xs text-muted line-through">
-                    ${product.price.toLocaleString()}
+                    {formatCurrency(product.price)}
                   </span>
                   <span className="text-xl font-bold text-primary">
-                    ${product.discountPrice.toLocaleString()}
+                    {formatCurrency(product.discountPrice)}
                   </span>
                 </div>
               ) : (
                 <span className="text-xl font-bold text-primary">
-                  ${product.price.toLocaleString()}
+                  {formatCurrency(product.price)}
                 </span>
               )}
             </div>

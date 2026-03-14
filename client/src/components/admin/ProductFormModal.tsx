@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from '
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Product } from '../../types';
+import type { Product, ProductType } from '../../types';
+import { getProductType } from '../../utils/product';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
 type ProductCategory = Product['category'];
 
 interface ProductSpecificationInput {
+  id: string;
   key: string;
   value: string;
 }
@@ -17,13 +19,11 @@ export interface ProductFormSubmission {
   name: string;
   brand: string;
   category: ProductCategory;
-  subcategory: string;
   price: number;
   discountPrice?: number;
   stock: number;
-  shortDescription: string;
   fullDescription: string;
-  featured: boolean;
+  productType: ProductType;
   specifications: Record<string, string>;
   existingImages: string[];
   newImageFiles: File[];
@@ -38,13 +38,24 @@ interface ProductFormModalProps {
   onSubmit: (values: ProductFormSubmission) => Promise<void>;
 }
 
-function createInitialSpecifications(product?: Product | null) {
-  const entries = Object.entries(product?.specifications || {}).map(([key, value]) => ({
+let specificationInputCount = 0;
+
+function createSpecificationInput(key = '', value = ''): ProductSpecificationInput {
+  specificationInputCount += 1;
+
+  return {
+    id: `spec-${specificationInputCount}`,
     key,
     value,
-  }));
+  };
+}
 
-  return entries.length > 0 ? entries : [{ key: '', value: '' }];
+function createInitialSpecifications(product?: Product | null) {
+  const entries = Object.entries(product?.specifications || {}).map(([key, value]) =>
+    createSpecificationInput(key, value)
+  );
+
+  return entries.length > 0 ? entries : [createSpecificationInput()];
 }
 
 function createPreviewEntry(file: File) {
@@ -65,17 +76,15 @@ export function ProductFormModal({
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState<ProductCategory>('Laptops');
-  const [subcategory, setSubcategory] = useState('');
+  const [productType, setProductType] = useState<ProductType>('normal');
   const [price, setPrice] = useState('');
   const [discountPrice, setDiscountPrice] = useState('');
   const [stock, setStock] = useState('');
-  const [shortDescription, setShortDescription] = useState('');
   const [fullDescription, setFullDescription] = useState('');
-  const [featured, setFeatured] = useState(false);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [newImages, setNewImages] = useState<Array<{ file: File; preview: string }>>([]);
   const [specifications, setSpecifications] = useState<ProductSpecificationInput[]>([
-    { key: '', value: '' },
+    createSpecificationInput(),
   ]);
 
   useEffect(() => {
@@ -86,15 +95,17 @@ export function ProductFormModal({
     setName(product?.name || '');
     setBrand(product?.brand || '');
     setCategory(product?.category || 'Laptops');
-    setSubcategory(product?.subcategory || '');
+    setProductType(
+      product
+        ? getProductType(product)
+        : 'normal'
+    );
     setPrice(String(product?.price ?? ''));
     setDiscountPrice(
       product?.discountPrice === undefined ? '' : String(product.discountPrice)
     );
     setStock(String(product?.stock ?? ''));
-    setShortDescription(product?.shortDescription || '');
-    setFullDescription(product?.fullDescription || '');
-    setFeatured(Boolean(product?.featured));
+    setFullDescription(product?.fullDescription || product?.shortDescription || '');
     setExistingImages(product?.images || []);
     setSpecifications(createInitialSpecifications(product));
 
@@ -127,7 +138,7 @@ export function ProductFormModal({
   );
 
   const updateSpecification =
-    (index: number, field: keyof ProductSpecificationInput) =>
+    (index: number, field: keyof Omit<ProductSpecificationInput, 'id'>) =>
     (event: ChangeEvent<HTMLInputElement>) => {
       setSpecifications((currentSpecifications) =>
         currentSpecifications.map((specification, specificationIndex) =>
@@ -141,14 +152,14 @@ export function ProductFormModal({
   const handleAddSpecification = () => {
     setSpecifications((currentSpecifications) => [
       ...currentSpecifications,
-      { key: '', value: '' },
+      createSpecificationInput(),
     ]);
   };
 
   const handleRemoveSpecification = (index: number) => {
     setSpecifications((currentSpecifications) => {
       if (currentSpecifications.length === 1) {
-        return [{ key: '', value: '' }];
+        return [createSpecificationInput()];
       }
 
       return currentSpecifications.filter((_, specificationIndex) => specificationIndex !== index);
@@ -214,7 +225,7 @@ export function ProductFormModal({
     const numericDiscountPrice = discountPrice === '' ? undefined : Number(discountPrice);
     const numericStock = Number(stock);
 
-    if (!name.trim() || !brand.trim() || !shortDescription.trim() || !fullDescription.trim()) {
+    if (!name.trim() || !brand.trim() || !fullDescription.trim()) {
       toast.error('Please complete all required product fields');
       return;
     }
@@ -256,13 +267,11 @@ export function ProductFormModal({
       name: name.trim(),
       brand: brand.trim(),
       category,
-      subcategory: subcategory.trim(),
       price: numericPrice,
       discountPrice: numericDiscountPrice,
       stock: Math.max(0, Math.trunc(numericStock)),
-      shortDescription: shortDescription.trim(),
       fullDescription: fullDescription.trim(),
-      featured,
+      productType,
       specifications: normalizedSpecifications,
       existingImages,
       newImageFiles: newImages.map((image) => image.file),
@@ -321,36 +330,31 @@ export function ProductFormModal({
                       <option value="Accessories">Accessories</option>
                     </select>
                   </div>
-                  <Input label="Subcategory" value={subcategory} onChange={(event) => setSubcategory(event.target.value)} />
+                  <div>
+                    <label className="text-sm font-medium text-primary block mb-1.5">
+                      Product Type
+                    </label>
+                    <select
+                      value={productType}
+                      onChange={(event) =>
+                        setProductType((event.target.value as ProductType) || 'normal')
+                      }
+                      className="w-full h-[42px] bg-surface border border-subtle/50 rounded-lg text-primary px-4 focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue transition-all"
+                    >
+                      <option value="normal">Normal Product</option>
+                      <option value="featured">Featured Product</option>
+                      <option value="sale">Sale Product</option>
+                    </select>
+                  </div>
                   <Input label="Price" type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} required />
                   <Input label="Discount Price" type="number" min="0" step="0.01" value={discountPrice} onChange={(event) => setDiscountPrice(event.target.value)} />
                   <Input label="Stock" type="number" min="0" step="1" value={stock} onChange={(event) => setStock(event.target.value)} required />
-                  <label className="flex items-center gap-3 text-sm font-medium text-primary pt-7">
-                    <input
-                      type="checkbox"
-                      checked={featured}
-                      onChange={(event) => setFeatured(event.target.checked)}
-                      className="rounded border-subtle bg-background text-accent-blue focus:ring-accent-blue"
-                    />
-                    Featured Product
-                  </label>
                 </div>
 
                 <div className="space-y-5">
                   <div>
                     <label className="text-sm font-medium text-primary block mb-1.5">
-                      Short Description
-                    </label>
-                    <textarea
-                      value={shortDescription}
-                      onChange={(event) => setShortDescription(event.target.value)}
-                      rows={3}
-                      className="w-full bg-surface border border-subtle/50 rounded-lg text-primary px-4 py-3 placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-primary block mb-1.5">
-                      Full Description
+                      Description
                     </label>
                     <textarea
                       value={fullDescription}
@@ -379,7 +383,7 @@ export function ProductFormModal({
                   </div>
                   <div className="space-y-3">
                     {specifications.map((specification, index) => (
-                      <div key={`${index}-${specification.key}`} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
+                      <div key={specification.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3">
                         <Input
                           label={index === 0 ? 'Specification Name' : undefined}
                           value={specification.key}

@@ -5,7 +5,9 @@ export interface ISellerMessage extends Document {
   customer: mongoose.Types.ObjectId;
   product?: mongoose.Types.ObjectId;
   message: string;
+  senderType: 'customer' | 'seller';
   isRead: boolean;
+  customerRead: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -16,7 +18,13 @@ const SellerMessageSchema = new Schema<ISellerMessage>(
     customer: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     product: { type: Schema.Types.ObjectId, ref: 'Product' },
     message: { type: String, required: true, trim: true },
+    senderType: {
+      type: String,
+      enum: ['customer', 'seller'],
+      default: 'customer',
+    },
     isRead: { type: Boolean, default: false },
+    customerRead: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

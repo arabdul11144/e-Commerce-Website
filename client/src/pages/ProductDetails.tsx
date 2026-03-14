@@ -19,9 +19,8 @@ import { useWishlist } from '../contexts/WishlistContext';
 import { getErrorMessage } from '../lib/api';
 import { sendSellerMessage } from '../lib/messages';
 import { fetchProductBySlug } from '../lib/products';
-import { getProductRatingMeta } from '../utils/product';
+import { formatCurrency, getProductRatingMeta } from '../utils/product';
 import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
 
 export function ProductDetails() {
   const { slug } = useParams<{ slug: string }>();
@@ -159,22 +158,12 @@ export function ProductDetails() {
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-
-        {/* Images */}
         <div className="space-y-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="aspect-square bg-elevated rounded-2xl overflow-hidden border border-subtle/20 relative"
           >
-            {product.discountPrice && (
-              <div className="absolute top-4 left-4 z-10">
-                <Badge variant="error" className="px-3 py-1 text-sm">
-                  Sale
-                </Badge>
-              </div>
-            )}
-
             <img
               src={product.images[activeImage] ?? product.images[0] ?? ''}
               alt={product.name}
@@ -205,9 +194,7 @@ export function ProductDetails() {
           )}
         </div>
 
-        {/* Details */}
         <div className="flex flex-col">
-
           <span className="text-sm font-medium tracking-wider uppercase text-accent-blue">
             {product.brand}
           </span>
@@ -239,20 +226,19 @@ export function ProductDetails() {
             </span>
           </div>
 
-          {/* Price */}
           <div className="mb-8">
             {product.discountPrice ? (
               <div className="flex items-end gap-3">
                 <span className="text-4xl font-bold text-primary">
-                  ${product.discountPrice.toLocaleString()}
+                  {formatCurrency(product.discountPrice)}
                 </span>
                 <span className="text-xl text-muted line-through mb-1">
-                  ${product.price.toLocaleString()}
+                  {formatCurrency(product.price)}
                 </span>
               </div>
             ) : (
               <span className="text-4xl font-bold text-primary">
-                ${product.price.toLocaleString()}
+                {formatCurrency(product.price)}
               </span>
             )}
 
@@ -264,12 +250,10 @@ export function ProductDetails() {
           </div>
 
           <p className="text-body text-lg mb-8 leading-relaxed">
-            {product.shortDescription}
+            {product.fullDescription || product.shortDescription}
           </p>
 
-          {/* Quantity */}
           <div className="bg-surface border border-subtle/30 rounded-xl p-6 mb-8">
-
             <div className="flex items-center gap-4 mb-6">
               <span className="text-sm font-medium text-primary">
                 Quantity
@@ -299,7 +283,6 @@ export function ProductDetails() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
-
               <Button size="lg" className="flex-1" onClick={handleBuyNow}>
                 Buy Now
               </Button>
@@ -344,7 +327,6 @@ export function ProductDetails() {
             )}
           </div>
 
-          {/* Extra Info */}
           <div className="grid grid-cols-2 gap-4 mb-10">
             <div className="flex items-center gap-3 text-sm text-body">
               <ShieldCheck className="w-5 h-5 text-accent-blue" />
@@ -357,9 +339,7 @@ export function ProductDetails() {
             </div>
           </div>
 
-          {/* Specifications */}
           <div className="border-t border-subtle/30 pt-8">
-
             <h3 className="text-xl font-bold text-primary mb-6">
               Technical Specifications
             </h3>
@@ -375,7 +355,6 @@ export function ProductDetails() {
                 </div>
               ))}
             </div>
-
           </div>
         </div>
       </div>

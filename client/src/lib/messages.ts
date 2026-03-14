@@ -27,3 +27,22 @@ export function markSellerMessageRead(token: string, messageId: string) {
     token,
   });
 }
+
+export function replyToCustomerMessage(token: string, messageId: string, message: string) {
+  return apiRequest<SellerMessage>(`/api/seller/messages/${encodeURIComponent(messageId)}/reply`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify({ message }),
+  });
+}
+
+export function fetchCustomerMessages(token: string) {
+  return apiRequest<SellerMessagesResponse>('/api/seller/messages/customer', { token });
+}
+
+export function markCustomerMessageRead(token: string, messageId: string) {
+  return apiRequest<SellerMessage>(`/api/seller/messages/customer/${encodeURIComponent(messageId)}/read`, {
+    method: 'PUT',
+    token,
+  });
+}

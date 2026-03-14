@@ -1,19 +1,49 @@
 import { type Request, type Response } from 'express';
 import Product from '../models/Product';
 
+const CUSTOMER_VISIBLE_STOCK_FILTER = { $gt: 0 };
+
+function normalizeCategoryValue(value: unknown) {
+  const normalizedValue = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
+
+  if (normalizedValue.startsWith('laptop')) {
+    return 'Laptops';
+  }
+
+  if (normalizedValue.startsWith('accessor')) {
+    return 'Accessories';
+  }
+
+  return '';
+}
+
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const { q, category, brand, minPrice, maxPrice, sort, featured } = req.query;
 
-    const filter: Record<string, any> = {};
+    const filter: Record<string, any> = {
+      stock: CUSTOMER_VISIBLE_STOCK_FILTER,
+    };
 
     if (q && typeof q === 'string') {
       const regex = new RegExp(q, 'i');
-      filter.$or = [{ name: regex }, { brand: regex }, { category: regex }];
+      filter.$or = [
+        { name: regex },
+        { brand: regex },
+        { category: regex },
+        { shortDescription: regex },
+        { fullDescription: regex },
+      ];
     }
 
     if (category && typeof category === 'string') {
-      filter.category = new RegExp(`^${category}$`, 'i');
+      const normalizedCategory = normalizeCategoryValue(category);
+      filter.category = normalizedCategory
+        ? normalizedCategory
+        : new RegExp(`^${category}$`, 'i');
     }
 
     if (brand && typeof brand === 'string') {
@@ -61,7 +91,10 @@ export const getProducts = async (req: Request, res: Response) => {
 
 export const getProductBySlug = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findOne({ slug: req.params.slug });
+    const product = await Product.findOne({
+      slug: req.params.slug,
+      stock: CUSTOMER_VISIBLE_STOCK_FILTER,
+    });
 
     if (product) {
       res.json(product);
@@ -75,7 +108,10 @@ export const getProductBySlug = async (req: Request, res: Response) => {
 
 export const getProductById = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findOne({
+      _id: req.params.id,
+      stock: CUSTOMER_VISIBLE_STOCK_FILTER,
+    });
 
     if (product) {
       res.json(product);

@@ -3,16 +3,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.changePassword = exports.updateAvatar = exports.updateProfile = exports.getMe = exports.loginUser = exports.registerUser = void 0;
+exports.changePassword = exports.updateAvatar = exports.updateProfile = exports.getMe = exports.subscribeToNewsletter = exports.loginUser = exports.registerUser = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const mongoose_1 = __importDefault(require("mongoose"));
 const User_1 = __importDefault(require("../models/User"));
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const generateToken = (id) => {
     return jsonwebtoken_1.default.sign({ id }, process.env.JWT_SECRET || 'supersecretjwtkey', {
         expiresIn: '30d',
     });
 };
-// Register
+function getNewsletterSubscriptionsCollection() {
+    return mongoose_1.default.connection.collection('newsletterSubscriptions');
+}
 const registerUser = async (req, res) => {
     try {
         const { firstName, lastName, email, phone, password } = req.body;
@@ -69,7 +73,6 @@ const registerUser = async (req, res) => {
     }
 };
 exports.registerUser = registerUser;
-// Login
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -100,7 +103,38 @@ const loginUser = async (req, res) => {
     }
 };
 exports.loginUser = loginUser;
-// Get current user
+const subscribeToNewsletter = async (req, res) => {
+    try {
+        const normalizedEmail = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+        if (!normalizedEmail) {
+            res.status(400).json({ message: 'Please provide an email address' });
+            return;
+        }
+        if (!EMAIL_REGEX.test(normalizedEmail)) {
+            res.status(400).json({ message: 'Please provide a valid email address' });
+            return;
+        }
+        const subscriptions = getNewsletterSubscriptionsCollection();
+        const existingSubscription = await subscriptions.findOne({ email: normalizedEmail });
+        if (existingSubscription) {
+            res.status(200).json({ message: 'This email is already subscribed.' });
+            return;
+        }
+        const timestamp = new Date();
+        await subscriptions.insertOne({
+            email: normalizedEmail,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+        });
+        res.status(201).json({
+            message: 'Subscription successful. Thanks for joining LapLab updates!',
+        });
+    }
+    catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+exports.subscribeToNewsletter = subscribeToNewsletter;
 const getMe = async (req, res) => {
     try {
         if (!req.user) {
@@ -115,7 +149,6 @@ const getMe = async (req, res) => {
     }
 };
 exports.getMe = getMe;
-// Update profile with password confirmation
 const updateProfile = async (req, res) => {
     try {
         if (!req.user) {
@@ -148,7 +181,7 @@ const updateProfile = async (req, res) => {
         const cleanEmail = String(email).trim();
         const existingUserWithEmail = await User_1.default.findOne({
             email: cleanEmail,
-            _id: { $ne: user._id }
+            _id: { $ne: user._id },
         });
         if (existingUserWithEmail) {
             res.status(400).json({ message: 'Email is already in use' });
@@ -178,7 +211,6 @@ const updateProfile = async (req, res) => {
     }
 };
 exports.updateProfile = updateProfile;
-// Update or remove avatar
 const updateAvatar = async (req, res) => {
     try {
         if (!req.user) {
@@ -222,7 +254,6 @@ const updateAvatar = async (req, res) => {
     }
 };
 exports.updateAvatar = updateAvatar;
-// Change password
 const changePassword = async (req, res) => {
     try {
         if (!req.user) {

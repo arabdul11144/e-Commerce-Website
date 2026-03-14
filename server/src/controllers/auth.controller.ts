@@ -1,8 +1,11 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import User from '../models/User';
 import { AuthRequest } from '../middlewares/auth.middleware';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const generateToken = (id: string) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'supersecretjwtkey', {
@@ -10,7 +13,10 @@ const generateToken = (id: string) => {
   });
 };
 
-// Register
+function getNewsletterSubscriptionsCollection() {
+  return mongoose.connection.collection('newsletterSubscriptions');
+}
+
 export const registerUser = async (req: Request, res: Response) => {
   try {
     const { firstName, lastName, email, phone, password } = req.body;
@@ -72,7 +78,6 @@ export const registerUser = async (req: Request, res: Response) => {
   }
 };
 
-// Login
 export const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -104,7 +109,45 @@ export const loginUser = async (req: Request, res: Response) => {
   }
 };
 
-// Get current user
+export const subscribeToNewsletter = async (req: Request, res: Response) => {
+  try {
+    const normalizedEmail =
+      typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+
+    if (!normalizedEmail) {
+      res.status(400).json({ message: 'Please provide an email address' });
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      res.status(400).json({ message: 'Please provide a valid email address' });
+      return;
+    }
+
+    const subscriptions = getNewsletterSubscriptionsCollection();
+    const existingSubscription = await subscriptions.findOne({ email: normalizedEmail });
+
+    if (existingSubscription) {
+      res.status(200).json({ message: 'This email is already subscribed.' });
+      return;
+    }
+
+    const timestamp = new Date();
+
+    await subscriptions.insertOne({
+      email: normalizedEmail,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    res.status(201).json({
+      message: 'Subscription successful. Thanks for joining LapLab updates!',
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getMe = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -119,7 +162,6 @@ export const getMe = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Update profile with password confirmation
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -161,7 +203,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
     const existingUserWithEmail = await User.findOne({
       email: cleanEmail,
-      _id: { $ne: user._id }
+      _id: { $ne: user._id },
     });
 
     if (existingUserWithEmail) {
@@ -195,7 +237,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Update or remove avatar
 export const updateAvatar = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
@@ -245,7 +286,6 @@ export const updateAvatar = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Change password
 export const changePassword = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {

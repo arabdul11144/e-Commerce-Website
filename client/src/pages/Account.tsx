@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../contexts/AuthContext';
 import { apiRequest, getErrorMessage } from '../lib/api';
+import { formatCurrency } from '../utils/product';
 
 interface ProfileFormState {
   firstName: string;
@@ -50,13 +51,13 @@ export function Account() {
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'orders', label: 'My Orders', icon: Package },
-    { id: 'addresses', label: 'Addresses', icon: MapPin }
+    { id: 'addresses', label: 'Addresses', icon: MapPin },
   ];
 
   const mockOrders = [
-    { id: '#TTV-2026-0847', date: 'Mar 10, 2026', total: 3598, status: 'processing', items: 2 },
-    { id: '#TTV-2025-1122', date: 'Nov 22, 2025', total: 199, status: 'delivered', items: 1 },
-    { id: '#TTV-2025-0615', date: 'Jun 15, 2025', total: 2499, status: 'delivered', items: 1 }
+    { id: '#LPL-2026-0847', date: 'Mar 10, 2026', total: 3598, status: 'processing', items: 2 },
+    { id: '#LPL-2025-1122', date: 'Nov 22, 2025', total: 199, status: 'delivered', items: 1 },
+    { id: '#LPL-2025-0615', date: 'Jun 15, 2025', total: 2499, status: 'delivered', items: 1 },
   ];
 
   const profileData = useMemo(() => ({
@@ -65,7 +66,7 @@ export function Account() {
     lastName: user?.lastName ?? '',
     email: user?.email ?? '',
     phone: user?.phone ?? '',
-    avatar: authUser?.avatar ?? ''
+    avatar: authUser?.avatar ?? '',
   }), [user, authUser]);
 
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
@@ -73,7 +74,7 @@ export function Account() {
     lastName: '',
     email: '',
     phone: '',
-    password: ''
+    password: '',
   });
 
   useEffect(() => {
@@ -82,7 +83,7 @@ export function Account() {
       lastName: profileData.lastName,
       email: profileData.email,
       phone: profileData.phone,
-      password: ''
+      password: '',
     });
   }, [profileData]);
 
@@ -107,7 +108,9 @@ export function Account() {
   const syncStoredSession = (updatedUser: UpdatedProfileResponse) => {
     const storedSessionRaw = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
-    if (!storedSessionRaw) return;
+    if (!storedSessionRaw) {
+      return;
+    }
 
     try {
       const storedSession = JSON.parse(storedSessionRaw) as Record<string, unknown>;
@@ -121,7 +124,7 @@ export function Account() {
         email: updatedUser.email,
         phone: updatedUser.phone,
         role: updatedUser.role,
-        avatar: updatedUser.avatar || ''
+        avatar: updatedUser.avatar || '',
       };
 
       window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
@@ -134,7 +137,7 @@ export function Account() {
     (field: keyof ProfileFormState) => (event: ChangeEvent<HTMLInputElement>) => {
       setProfileForm((current) => ({
         ...current,
-        [field]: event.target.value
+        [field]: event.target.value,
       }));
     };
 
@@ -150,13 +153,15 @@ export function Account() {
       lastName: profileData.lastName,
       email: profileData.email,
       phone: profileData.phone,
-      password: ''
+      password: '',
     });
     setIsEditModalOpen(true);
   };
 
   const closeEditModal = () => {
-    if (!isSavingProfile) setIsEditModalOpen(false);
+    if (!isSavingProfile) {
+      setIsEditModalOpen(false);
+    }
   };
 
   const handleProfileIconClick = () => {
@@ -176,8 +181,8 @@ export function Account() {
         method: 'PUT',
         token,
         body: JSON.stringify({
-          removeAvatar: true
-        })
+          removeAvatar: true,
+        }),
       });
 
       setProfileImage('');
@@ -205,7 +210,9 @@ export function Account() {
   const handleProfileImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     if (!token) {
       toast.error('Please sign in again.');
@@ -236,8 +243,8 @@ export function Account() {
           method: 'PUT',
           token,
           body: JSON.stringify({
-            avatar: result
-          })
+            avatar: result,
+          }),
         });
 
         setProfileImage(updatedUser.avatar || result);
@@ -279,8 +286,8 @@ export function Account() {
           lastName: profileForm.lastName.trim(),
           email: profileForm.email.trim(),
           phone: profileForm.phone.trim(),
-          password: profileForm.password
-        })
+          password: profileForm.password,
+        }),
       });
 
       syncStoredSession(updatedUser);
@@ -298,15 +305,11 @@ export function Account() {
   return (
     <>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-
         <h1 className="text-3xl font-bold text-primary mb-8">My Account</h1>
 
         <div className="flex flex-col md:flex-row md:items-stretch gap-8">
-
-          {/* Sidebar */}
           <div className="md:w-64 flex-shrink-0">
             <Card className="overflow-hidden h-full">
-
               <div className="p-6 border-b border-subtle/30 text-center">
                 <div className="relative inline-block" ref={photoMenuRef}>
                   <button
@@ -377,7 +380,6 @@ export function Account() {
               </div>
 
               <nav className="flex flex-col p-2">
-
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -402,17 +404,13 @@ export function Account() {
                   <LogOut className="w-5 h-5" />
                   Sign Out
                 </button>
-
               </nav>
             </Card>
           </div>
 
-          {/* Content */}
           <div className="flex-1 flex">
-
             {activeTab === 'profile' && (
               <Card className="p-6 md:p-8 w-full h-full">
-
                 <div className="flex justify-between mb-6">
                   <h2 className="text-2xl font-bold text-primary">
                     Personal Information
@@ -444,13 +442,11 @@ export function Account() {
                     readOnly
                   />
                 </div>
-
               </Card>
             )}
 
             {activeTab === 'orders' && (
               <Card className="p-6 md:p-8 w-full h-full">
-
                 <h2 className="text-2xl font-bold text-primary mb-6">
                   Order History
                 </h2>
@@ -458,7 +454,6 @@ export function Account() {
                 <div className="space-y-4">
                   {mockOrders.map((order) => (
                     <div key={order.id} className="border border-subtle/30 rounded-xl p-6">
-
                       <div className="flex justify-between mb-4">
                         <div>
                           <h3 className="font-bold text-primary">{order.id}</h3>
@@ -469,7 +464,10 @@ export function Account() {
 
                         <div className="flex items-center gap-4">
                           <span className="font-bold text-primary">
-                            ${order.total.toFixed(2)}
+                            {formatCurrency(order.total, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
 
                           <Badge
@@ -489,17 +487,14 @@ export function Account() {
                           View Details
                         </Button>
                       </div>
-
                     </div>
                   ))}
                 </div>
-
               </Card>
             )}
 
             {activeTab === 'addresses' && (
               <Card className="p-6 md:p-8 w-full h-full">
-
                 <div className="flex justify-between mb-6">
                   <h2 className="text-2xl font-bold text-primary">
                     Saved Addresses
@@ -511,9 +506,7 @@ export function Account() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
                   <div className="border border-accent-gold rounded-xl p-6 relative">
-
                     <Badge variant="gold" className="absolute top-4 right-4">
                       Default
                     </Badge>
@@ -540,11 +533,9 @@ export function Account() {
                         Delete
                       </button>
                     </div>
-
                   </div>
 
                   <div className="border border-subtle/30 rounded-xl p-6">
-
                     <h3 className="font-bold text-primary mb-2">
                       Office
                     </h3>
@@ -570,16 +561,11 @@ export function Account() {
                         Set as Default
                       </button>
                     </div>
-
                   </div>
-
                 </div>
-
               </Card>
             )}
-
           </div>
-
         </div>
       </div>
     </>

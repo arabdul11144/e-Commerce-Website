@@ -62,6 +62,21 @@ function normalizeSpecifications(value) {
         return accumulator;
     }, {});
 }
+function normalizeProductType(value, featured, discountPrice, price) {
+    if (value === 'featured' || value === 'sale' || value === 'normal') {
+        return value;
+    }
+    if (featured) {
+        return 'featured';
+    }
+    if (discountPrice !== undefined &&
+        Number.isFinite(discountPrice) &&
+        discountPrice >= 0 &&
+        discountPrice < price) {
+        return 'sale';
+    }
+    return 'normal';
+}
 async function normalizeImages(images, sellerId) {
     if (!Array.isArray(images)) {
         return [];
@@ -87,6 +102,12 @@ async function normalizeImages(images, sellerId) {
     return normalizedImages;
 }
 function sanitizeProductPayload(payload, sellerId) {
+    const price = normalizePrice(payload.price);
+    const discountPrice = payload.discountPrice === undefined || payload.discountPrice === null || payload.discountPrice === ''
+        ? undefined
+        : normalizePrice(payload.discountPrice);
+    const featured = Boolean(payload.featured);
+    const productType = normalizeProductType(payload.productType, featured, discountPrice, price);
     return {
         name: String(payload.name || '').trim(),
         slug: String(payload.slug || '').trim(),
@@ -94,15 +115,14 @@ function sanitizeProductPayload(payload, sellerId) {
         brand: String(payload.brand || '').trim(),
         category: (payload.category === 'Accessories' ? 'Accessories' : 'Laptops'),
         subcategory: typeof payload.subcategory === 'string' ? payload.subcategory.trim() : undefined,
-        price: normalizePrice(payload.price),
-        discountPrice: payload.discountPrice === undefined || payload.discountPrice === null || payload.discountPrice === ''
-            ? undefined
-            : normalizePrice(payload.discountPrice),
+        price,
+        discountPrice,
         stock: normalizeStock(payload.stock),
         shortDescription: String(payload.shortDescription || '').trim(),
         fullDescription: String(payload.fullDescription || '').trim(),
         specifications: normalizeSpecifications(payload.specifications),
-        featured: Boolean(payload.featured),
+        featured: productType === 'featured',
+        productType,
         rating: normalizePrice(payload.rating),
         reviewsCount: normalizeStock(payload.reviewsCount),
         seller: reqSellerIdPlaceholder(sellerId),
@@ -238,6 +258,7 @@ const updateSellerProduct = async (req, res) => {
         product.fullDescription = sanitizedPayload.fullDescription || product.fullDescription;
         product.specifications = sanitizedPayload.specifications;
         product.featured = sanitizedPayload.featured;
+        product.productType = sanitizedPayload.productType;
         product.rating = sanitizedPayload.rating;
         product.reviewsCount = sanitizedPayload.reviewsCount;
         product.images = images;

@@ -5,7 +5,8 @@ import {
   getMe,
   updateProfile,
   updateAvatar,
-  changePassword
+  changePassword,
+  subscribeToNewsletter,
 } from '../controllers/auth.controller';
 import { protect } from '../middlewares/auth.middleware';
 
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.post('/newsletter/subscribe', subscribeToNewsletter);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.put('/profile/avatar', protect, updateAvatar);

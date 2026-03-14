@@ -22,6 +22,7 @@ import { Badge } from '../components/ui/Badge';
 import { useSellerAuth } from '../contexts/SellerAuthContext';
 import { getErrorMessage } from '../lib/api';
 import { fetchAdminStats, type AdminDashboardStats } from '../lib/admin';
+import { formatCompactCurrency, formatCurrency } from '../utils/product';
 
 function createEmptyStats(): AdminDashboardStats {
   const today = new Date();
@@ -51,10 +52,6 @@ function createEmptyStats(): AdminDashboardStats {
     ],
     recentOrders: [],
   };
-}
-
-function formatCurrency(value: number) {
-  return `$${value.toLocaleString()}`;
 }
 
 function formatTrend(value: number) {
@@ -233,7 +230,7 @@ export function AdminDashboard() {
                   stroke="#8f959c"
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(value) => `$${value / 1000}k`}
+                  tickFormatter={(value) => formatCompactCurrency(Number(value))}
                 />
                 <Tooltip
                   contentStyle={{
@@ -244,6 +241,7 @@ export function AdminDashboard() {
                   itemStyle={{
                     color: '#e3b341',
                   }}
+                  formatter={(value: number | string) => formatCurrency(Number(value))}
                 />
                 <Area
                   type="monotone"
@@ -330,7 +328,7 @@ export function AdminDashboard() {
                   <td className="p-4 text-body">{order.customer}</td>
                   <td className="p-4 text-body">{order.date}</td>
                   <td className="p-4 text-primary font-medium">
-                    ${order.total.toLocaleString()}
+                    {formatCurrency(order.total)}
                   </td>
                   <td className="p-4">
                     <Badge
