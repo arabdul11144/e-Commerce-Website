@@ -18,7 +18,7 @@ interface SellerAuthContextValue {
   seller: Seller | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   register: (payload: SellerRegisterPayload) => Promise<void>;
   logout: () => void;
   syncSeller: (seller: Seller) => void;
@@ -61,8 +61,8 @@ export function SellerAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (username: string, password: string) => {
-      const nextSession = await loginSeller(username, password);
+    async (email: string, password: string) => {
+      const nextSession = await loginSeller(email, password);
       updateSession(nextSession);
     },
     [updateSession]

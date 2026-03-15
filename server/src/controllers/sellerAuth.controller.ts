@@ -124,19 +124,25 @@ export const registerSeller = async (req: Request, res: Response) => {
 
 export const loginSeller = async (req: Request, res: Response) => {
   try {
-    const { username, password } = req.body;
+    const email =
+      typeof req.body?.email === 'string'
+        ? req.body.email
+        : typeof req.body?.validEmail === 'string'
+          ? req.body.validEmail
+          : '';
+    const { password } = req.body;
 
-    if (!username || !password) {
-      res.status(400).json({ message: 'Please provide username and password' });
+    if (!email || !password) {
+      res.status(400).json({ message: 'Please provide email and password' });
       return;
     }
 
     const seller = await Seller.findOne({
-      username: String(username).trim().toLowerCase(),
+      validEmail: String(email).trim().toLowerCase(),
     });
 
     if (!seller || !seller.password || !(await bcrypt.compare(password, seller.password))) {
-      res.status(401).json({ message: 'Invalid seller username or password' });
+      res.status(401).json({ message: 'Invalid seller email or password' });
       return;
     }
 

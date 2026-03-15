@@ -111,7 +111,7 @@ export function SellerAuth({ initialMode = 'login' }: { initialMode?: 'login' | 
 
     try {
       if (isLogin) {
-        await login(formState.username.trim(), formState.password);
+        await login(formState.validEmail.trim(), formState.password);
         toast.success('Seller logged in successfully');
       } else {
         await register({
@@ -253,14 +253,26 @@ export function SellerAuth({ initialMode = 'login' }: { initialMode?: 'login' | 
             )}
           </AnimatePresence>
 
-          <Input
-            label="Username"
-            placeholder="sellerusername"
-            leftIcon={<User className="w-4 h-4" />}
-            value={formState.username}
-            onChange={updateField('username')}
-            required
-          />
+          {isLogin ? (
+            <Input
+              label="Email"
+              type="email"
+              placeholder="seller@example.com"
+              leftIcon={<Mail className="w-4 h-4" />}
+              value={formState.validEmail}
+              onChange={updateField('validEmail')}
+              required
+            />
+          ) : (
+            <Input
+              label="Username"
+              placeholder="sellerusername"
+              leftIcon={<User className="w-4 h-4" />}
+              value={formState.username}
+              onChange={updateField('username')}
+              required
+            />
+          )}
 
           <Input
             label="Password"

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
@@ -305,6 +305,64 @@ export function Home() {
       desc: 'Dedicated premium support',
     },
   ];
+
+  if (hasActiveSearch) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="mb-10">
+          <h1 className="text-4xl font-bold text-primary mb-4">Search Results</h1>
+          <p className="text-body">
+            Showing {searchableProducts.length} {searchableProducts.length === 1 ? 'result' : 'results'} for "{searchQuery.trim()}"
+          </p>
+        </div>
+
+        {visibleAllProducts.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {visibleAllProducts.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+
+            {allProductsTotalPages > 1 && (
+              <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-body">
+                  Showing {allProductsStartIndex + 1}-{allProductsStartIndex + visibleAllProducts.length} of {searchableProducts.length} products
+                </p>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setAllProductsPage((currentPage) => Math.max(1, currentPage - 1))}
+                    disabled={allProductsPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-body">
+                    Page {allProductsPage} of {allProductsTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      setAllProductsPage((currentPage) =>
+                        Math.min(allProductsTotalPages, currentPage + 1)
+                      )
+                    }
+                    disabled={allProductsPage === allProductsTotalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="rounded-2xl border border-subtle/30 bg-surface p-8 text-center text-muted">
+            {`No products match "${searchQuery.trim()}".`}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>

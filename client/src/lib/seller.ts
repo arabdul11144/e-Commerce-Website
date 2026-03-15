@@ -26,10 +26,10 @@ export interface SellerProfilePayload {
   username: string;
 }
 
-export function loginSeller(username: string, password: string) {
+export function loginSeller(email: string, password: string) {
   return apiRequest<SellerSession>('/api/seller/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email, password }),
   });
 }
 
