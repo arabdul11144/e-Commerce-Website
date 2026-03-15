@@ -21,6 +21,7 @@ export interface ProductFormSubmission {
   category: ProductCategory;
   price: number;
   discountPrice?: number;
+  shippingFee: number;
   stock: number;
   fullDescription: string;
   productType: ProductType;
@@ -79,6 +80,7 @@ export function ProductFormModal({
   const [productType, setProductType] = useState<ProductType>('normal');
   const [price, setPrice] = useState('');
   const [discountPrice, setDiscountPrice] = useState('');
+  const [shippingFee, setShippingFee] = useState('0');
   const [stock, setStock] = useState('');
   const [fullDescription, setFullDescription] = useState('');
   const [existingImages, setExistingImages] = useState<string[]>([]);
@@ -104,6 +106,7 @@ export function ProductFormModal({
     setDiscountPrice(
       product?.discountPrice === undefined ? '' : String(product.discountPrice)
     );
+    setShippingFee(String(product?.shippingFee ?? 0));
     setStock(String(product?.stock ?? ''));
     setFullDescription(product?.fullDescription || product?.shortDescription || '');
     setExistingImages(product?.images || []);
@@ -223,6 +226,7 @@ export function ProductFormModal({
 
     const numericPrice = Number(price);
     const numericDiscountPrice = discountPrice === '' ? undefined : Number(discountPrice);
+    const numericShippingFee = Number(shippingFee);
     const numericStock = Number(stock);
 
     if (!name.trim() || !brand.trim() || !fullDescription.trim()) {
@@ -243,6 +247,10 @@ export function ProductFormModal({
       return;
     }
 
+    if (!Number.isFinite(numericShippingFee) || numericShippingFee < 0) {
+      toast.error('Please provide a valid shipping fee');
+      return;
+    }
     if (!Number.isFinite(numericStock) || numericStock < 0) {
       toast.error('Please provide a valid stock quantity');
       return;
@@ -269,6 +277,7 @@ export function ProductFormModal({
       category,
       price: numericPrice,
       discountPrice: numericDiscountPrice,
+      shippingFee: numericShippingFee,
       stock: Math.max(0, Math.trunc(numericStock)),
       fullDescription: fullDescription.trim(),
       productType,
@@ -348,6 +357,7 @@ export function ProductFormModal({
                   </div>
                   <Input label="Price" type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} required />
                   <Input label="Discount Price" type="number" min="0" step="0.01" value={discountPrice} onChange={(event) => setDiscountPrice(event.target.value)} />
+                  <Input label="Shipping Fee" type="number" min="0" step="0.01" value={shippingFee} onChange={(event) => setShippingFee(event.target.value)} required />
                   <Input label="Stock" type="number" min="0" step="1" value={stock} onChange={(event) => setStock(event.target.value)} required />
                 </div>
 

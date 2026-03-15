@@ -1,4 +1,4 @@
-﻿import type { Product, ProductType } from '../types';
+import type { Product, ProductType } from '../types';
 import { resolveApiUrl } from '../lib/api';
 
 type ProductInput = Partial<Product> & {
@@ -136,6 +136,10 @@ export function normalizeProduct(product: ProductInput): Product {
   const price = toNumber(product.price);
   const discountPrice =
     product.discountPrice === undefined ? undefined : toNumber(product.discountPrice);
+  const shippingFee = Math.max(
+    0,
+    toNumber((product as ProductInput & { shippingFee?: unknown }).shippingFee)
+  );
   const productType = getProductType({
     productType: normalizeProductType(
       (product as ProductInput & { productType?: unknown }).productType
@@ -167,6 +171,7 @@ export function normalizeProduct(product: ProductInput): Product {
     subcategory: product.subcategory,
     price,
     discountPrice,
+    shippingFee,
     stock: Math.max(0, Math.trunc(toNumber(product.stock))),
     shortDescription: product.shortDescription ?? '',
     fullDescription: product.fullDescription ?? '',

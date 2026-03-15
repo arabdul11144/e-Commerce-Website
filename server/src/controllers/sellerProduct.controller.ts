@@ -171,6 +171,7 @@ function sanitizeProductPayload(payload: Record<string, unknown>, sellerId: stri
       typeof payload.subcategory === 'string' ? payload.subcategory.trim() : undefined,
     price,
     discountPrice,
+    shippingFee: normalizePrice(payload.shippingFee),
     stock: normalizeStock(payload.stock),
     shortDescription,
     fullDescription,
@@ -339,6 +340,7 @@ export const updateSellerProduct = async (req: SellerAuthRequest, res: Response)
     product.subcategory = sanitizedPayload.subcategory;
     product.price = sanitizedPayload.price;
     product.discountPrice = sanitizedPayload.discountPrice;
+    product.shippingFee = sanitizedPayload.shippingFee;
     product.stock = sanitizedPayload.stock;
     product.shortDescription = sanitizedPayload.shortDescription || product.shortDescription;
     product.fullDescription = sanitizedPayload.fullDescription || product.fullDescription;

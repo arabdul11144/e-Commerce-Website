@@ -25,6 +25,10 @@ export function ProductCard({ product }: ProductCardProps) {
   const favorite = isFavorite(product.id);
   const cartPending = isCartMutating(product.id);
   const wishlistPending = isMutating(product.id);
+  const shippingLabel =
+    product.shippingFee === 0
+      ? 'Free Shipping'
+      : `Shipping: ${formatCurrency(product.shippingFee)}`;
 
   useEffect(() => {
     setActiveImageIndex(0);
@@ -74,7 +78,7 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.name}
           </h3>
 
-          <div className="flex items-center gap-1 mb-4">
+          <div className="flex items-center gap-1 mb-2">
             <Star
               className={`w-4 h-4 ${
                 rating > 0 ? 'fill-accent-gold text-accent-gold' : 'text-subtle'
@@ -83,6 +87,8 @@ export function ProductCard({ product }: ProductCardProps) {
             <span className="text-sm font-medium text-primary">{ratingLabel}</span>
             <span className="text-xs text-muted">({reviewsCount})</span>
           </div>
+
+          <p className="text-sm text-body mb-4">{shippingLabel}</p>
 
           <div className="mt-auto flex items-end justify-between">
             <div>

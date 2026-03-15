@@ -27,6 +27,7 @@ interface CartContextValue {
   cartCount: number;
   isLoading: boolean;
   isMutating: (productId: string) => boolean;
+  refreshCart: () => Promise<void>;
   addToCart: (product: Product, quantity?: number) => Promise<void>;
   updateCartItem: (productId: string, quantity: number) => Promise<void>;
   removeFromCart: (productId: string) => Promise<void>;
@@ -72,37 +73,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [pendingIds, setPendingIds] = useState<string[]>([]);
 
-  useEffect(() => {
+  const refreshCart = useCallback(async () => {
     if (!token || !isAuthenticated) {
       setCartItems([]);
       setIsLoading(false);
       return;
     }
 
-    let isCancelled = false;
     setIsLoading(true);
 
-    apiRequest<CartResponse>('/api/cart', { token })
-      .then((response) => {
-        if (!isCancelled) {
-          setCartItems(mapCartItems(response));
-        }
-      })
-      .catch(() => {
-        if (!isCancelled) {
-          setCartItems([]);
-        }
-      })
-      .finally(() => {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      isCancelled = true;
-    };
+    try {
+      const response = await apiRequest<CartResponse>('/api/cart', { token });
+      setCartItems(mapCartItems(response));
+    } catch {
+      setCartItems([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, [isAuthenticated, token]);
+
+  useEffect(() => {
+    refreshCart().catch(() => undefined);
+  }, [refreshCart]);
 
   const trackPendingState = useCallback((productId: string, isPending: boolean) => {
     setPendingIds((currentIds) => {
@@ -223,6 +215,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       cartCount,
       isLoading,
       isMutating,
+      refreshCart,
       addToCart,
       updateCartItem,
       removeFromCart,
@@ -233,6 +226,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       cartItems,
       isLoading,
       isMutating,
+      refreshCart,
       removeFromCart,
       updateCartItem,
     ]

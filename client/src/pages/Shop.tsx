@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Filter, ChevronDown, Check } from 'lucide-react';
@@ -42,6 +42,7 @@ export function Shop() {
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [freeShippingOnly, setFreeShippingOnly] = useState(false);
   const [minPriceInput, setMinPriceInput] = useState('');
   const [maxPriceInput, setMaxPriceInput] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('featured');
@@ -104,6 +105,10 @@ export function Shop() {
         return false;
       }
 
+      if (freeShippingOnly && product.shippingFee > 0) {
+        return false;
+      }
+
       const productPrice = product.discountPrice ?? product.price;
 
       if (minPrice !== undefined && productPrice < minPrice) {
@@ -143,6 +148,7 @@ export function Shop() {
   }, [
     categoryParam,
     dealsParam,
+    freeShippingOnly,
     maxPriceInput,
     minPriceInput,
     products,
@@ -153,6 +159,7 @@ export function Shop() {
 
   const clearFilters = () => {
     setSelectedBrands([]);
+    setFreeShippingOnly(false);
     setMinPriceInput('');
     setMaxPriceInput('');
     setSortBy('featured');
@@ -286,6 +293,34 @@ export function Shop() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="text-primary font-semibold mb-4">Shipping</h3>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={freeShippingOnly}
+                  onChange={() => setFreeShippingOnly((currentValue) => !currentValue)}
+                  className="sr-only"
+                />
+
+                <div
+                  className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                    freeShippingOnly
+                      ? 'bg-accent-blue border-accent-blue'
+                      : 'border-subtle group-hover:border-muted'
+                  }`}
+                >
+                  {freeShippingOnly && (
+                    <Check className="w-3 h-3 text-background" />
+                  )}
+                </div>
+
+                <span className="text-sm text-body group-hover:text-primary transition-colors">
+                  Free Shipping
+                </span>
+              </label>
             </div>
 
             <div>

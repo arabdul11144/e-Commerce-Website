@@ -361,26 +361,19 @@ export function AdminLayout() {
             <ArrowLeft className="w-5 h-5 text-muted" />
             <span className="font-medium">Back to Store</span>
           </Link>
-          <Link
-            to="/admin/account"
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-body hover:bg-surface hover:text-primary transition-colors"
-          >
-            <User className="w-5 h-5 text-muted" />
-            <span className="font-medium">Account Details</span>
-          </Link>
         </div>
       </motion.aside>
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="h-20 bg-surface/50 backdrop-blur-md border-b border-subtle/30 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-30">
+        <header className="h-20 bg-accent-gold border-b border-accent-goldHover/40 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-30">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 text-muted hover:text-primary rounded-lg hover:bg-elevated transition-colors"
+              className="lg:hidden p-2 text-background/70 hover:text-background rounded-lg hover:bg-background/10 transition-colors"
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h1 className="text-xl font-bold text-primary hidden sm:block">
+            <h1 className="text-xl font-bold text-background hidden sm:block">
               {getPageTitle()}
             </h1>
           </div>
@@ -390,11 +383,11 @@ export function AdminLayout() {
               <button
                 type="button"
                 onClick={handleMessagesToggle}
-                className="relative p-2 text-muted hover:text-primary rounded-full hover:bg-elevated transition-colors"
+                className="relative p-2 text-background/70 hover:text-background rounded-full hover:bg-background/10 transition-colors"
               >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-status-error text-background text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-surface">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-status-error text-background text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-accent-gold">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
@@ -458,8 +451,18 @@ export function AdminLayout() {
                             </p>
                           )}
 
-                          <div className={`mt-2 rounded-xl px-3 py-2.5 text-sm leading-relaxed ${getMessageBubbleClass(message)}`}>
-                            {message.message}
+                          <div
+                            className={`mt-2 flex ${
+                              message.senderType === 'customer'
+                                ? 'justify-start'
+                                : 'justify-end'
+                            }`}
+                          >
+                            <div
+                              className={`max-w-[88%] rounded-xl px-3 py-2.5 text-sm leading-relaxed ${getMessageBubbleClass(message)}`}
+                            >
+                              {message.message}
+                            </div>
                           </div>
 
                           {message.senderType === 'customer' && (
@@ -524,7 +527,7 @@ export function AdminLayout() {
               )}
             </div>
 
-            <div className="h-8 w-px bg-subtle/30" />
+            <div className="h-8 w-px bg-background/20" />
 
             <div className="relative" ref={profileMenuRef}>
               <button
@@ -537,10 +540,10 @@ export function AdminLayout() {
                 className="flex items-center gap-3"
               >
                 <div className="hidden sm:block text-right">
-                  <p className="text-sm font-medium text-primary">{adminName}</p>
-                  <p className="text-xs text-muted">Seller</p>
+                  <p className="text-sm font-medium text-background">{adminName}</p>
+                  <p className="text-xs text-background/70">Seller</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-accent-gold flex items-center justify-center text-background font-bold text-lg shadow-lg shadow-accent-gold/20 overflow-hidden">
+                <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-accent-gold font-bold text-lg shadow-lg shadow-background/20 overflow-hidden">
                   {profileImage ? (
                     <img
                       src={profileImage}

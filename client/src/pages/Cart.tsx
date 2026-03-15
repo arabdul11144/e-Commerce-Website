@@ -13,8 +13,7 @@ export function Cart() {
     return acc + price * item.quantity;
   }, 0);
   const shipping = subtotal > 500 ? 0 : 25;
-  const tax = subtotal * 0.08;
-  const total = subtotal + shipping + tax;
+  const total = subtotal + shipping;
 
   if (isLoading) {
     return (
@@ -54,7 +53,7 @@ export function Cart() {
               <div className="col-span-6">Product</div>
               <div className="col-span-2 text-center">Price</div>
               <div className="col-span-2 text-center">Quantity</div>
-              <div className="col-span-2 text-right">Total</div>
+              <div className="col-span-2" aria-hidden="true"></div>
             </div>
 
             <div className="divide-y divide-subtle/20">
@@ -122,22 +121,14 @@ export function Cart() {
                       </div>
                     </div>
 
-                    <div className="col-span-2 flex items-center justify-between sm:justify-end w-full sm:w-auto mt-4 sm:mt-0">
-                      <span className="sm:hidden text-muted text-sm">
-                        Total:
-                      </span>
-                      <div className="flex items-center gap-4">
-                        <span className="text-primary font-bold">
-                          {formatCurrency(price * item.quantity)}
-                        </span>
-                        <button
-                          onClick={() => removeFromCart(item.product.id)}
-                          disabled={isPending}
-                          className="text-muted hover:text-status-error transition-colors p-2 disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                    <div className="col-span-2 flex justify-end w-full sm:w-auto mt-4 sm:mt-0">
+                      <button
+                        onClick={() => removeFromCart(item.product.id)}
+                        disabled={isPending}
+                        className="text-muted hover:text-status-error transition-colors p-2 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -165,15 +156,7 @@ export function Cart() {
                   {shipping === 0 ? 'Free' : formatCurrency(shipping)}
                 </span>
               </div>
-              <div className="flex justify-between text-body">
-                <span>Estimated Tax</span>
-                <span className="text-primary font-medium">
-                  {formatCurrency(tax, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
+
             </div>
 
             <div className="border-t border-subtle/30 pt-4 mb-8">

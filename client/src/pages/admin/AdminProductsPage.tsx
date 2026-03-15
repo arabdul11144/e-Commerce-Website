@@ -249,6 +249,7 @@ export function AdminProductsPage() {
       category: values.category,
       price: values.price,
       stock: values.stock,
+      shippingFee: values.shippingFee,
       shortDescription: values.fullDescription,
       fullDescription: values.fullDescription,
       slug: product?.slug || `${baseSlug}-${uniqueSuffix}`,

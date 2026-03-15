@@ -556,7 +556,11 @@ export function Navbar({
                 <Link
                   key={link.name}
                   to={link.path}
-                  className={`text-[15px] font-medium transition-colors hover:text-primary ${isLinkActive(link.path) ? 'text-primary' : 'text-body'}`}
+                  className={`text-[15px] font-medium transition-colors ${
+                    isLinkActive(link.path)
+                      ? 'text-accent-gold'
+                      : 'text-body hover:text-primary'
+                  }`}
                 >
                   {link.name}
                 </Link>
@@ -691,7 +695,9 @@ export function Navbar({
                   <Link
                     key={link.name}
                     to={link.path}
-                    className="text-lg font-medium text-primary py-2 border-b border-subtle/20"
+                    className={`text-lg font-medium py-2 border-b border-subtle/20 ${
+                      isLinkActive(link.path) ? 'text-accent-gold' : 'text-primary'
+                    }`}
                   >
                     {link.name}
                   </Link>

@@ -7,7 +7,14 @@ import Product from '../models/Product';
 
 export const createOrder = async (req: AuthRequest, res: Response) => {
   try {
-    const { items, total, shippingAddress, contactEmail } = req.body;
+    const {
+      items,
+      total,
+      shippingAddress,
+      contactEmail,
+      clearCart,
+      paymentStatus,
+    } = req.body;
 
     if (!items || items.length === 0) {
       res.status(400).json({ message: 'No order items' });
@@ -93,13 +100,25 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       shippingAddress,
       contactEmail,
       status: 'pending',
-      paymentStatus: 'pending',
+      paymentStatus: paymentStatus === 'paid' ? 'paid' : 'pending',
     });
 
     const createdOrder = await order.save();
 
-    // Clear the cart after order
-    await Cart.findOneAndUpdate({ user: req.user?._id }, { items: [] });
+    if (clearCart === true) {
+      const cart = await Cart.findOne({ user: req.user?._id });
+
+      if (cart) {
+        const orderedProductIds = new Set(
+          normalizedItems.map((item) => item.product.toString())
+        );
+
+        cart.items = cart.items.filter(
+          (item) => !orderedProductIds.has(item.product.toString())
+        );
+        await cart.save();
+      }
+    }
 
     res.status(201).json(createdOrder);
   } catch (error: any) {

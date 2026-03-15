@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Star,
@@ -23,6 +23,7 @@ import { formatCurrency, getProductRatingMeta } from '../utils/product';
 import { Button } from '../components/ui/Button';
 
 export function ProductDetails() {
+  const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,13 +82,29 @@ export function ProductDetails() {
   const favorite = isFavorite(product.id);
   const cartPending = isCartMutating(product.id);
   const wishlistPending = isMutating(product.id);
+  const shippingLabel =
+    product.shippingFee === 0
+      ? 'Free Shipping'
+      : `Shipping ${formatCurrency(product.shippingFee)}`;
 
   const handleAddToCart = async () => {
     await addToCart(product, quantity);
   };
 
   const handleBuyNow = () => {
-    toast.success('Proceeding to checkout...');
+    if (!isAuthenticated || !token) {
+      toast.error('Sign in to continue checkout');
+      return;
+    }
+
+    navigate('/checkout', {
+      state: {
+        buyNowItem: {
+          product,
+          quantity,
+        },
+      },
+    });
   };
 
   const handleWishlist = async () => {
@@ -335,7 +352,7 @@ export function ProductDetails() {
 
             <div className="flex items-center gap-3 text-sm text-body">
               <Truck className="w-5 h-5 text-accent-blue" />
-              <span>Free Fast Delivery</span>
+              <span>{shippingLabel}</span>
             </div>
           </div>
 

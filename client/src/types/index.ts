@@ -11,6 +11,7 @@ export interface Product {
   subcategory?: string;
   price: number;
   discountPrice?: number;
+  shippingFee: number;
   stock: number;
   shortDescription: string;
   fullDescription: string;
