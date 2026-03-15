@@ -60,6 +60,13 @@ export interface AdminOrderRow {
   date: string;
   total: number;
   items: number;
+  products?: Array<{
+    id: string;
+    name: string;
+    brand?: string;
+    image?: string;
+    quantity: number;
+  }>;
   status: string;
   payment: string;
 }
@@ -76,6 +83,10 @@ export interface AdminOrderDetailsResponse {
   };
   items?: Array<{
     quantity?: number;
+    product?: {
+      name?: string;
+      images?: string[];
+    };
   }>;
 }
 

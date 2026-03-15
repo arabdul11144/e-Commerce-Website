@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -15,6 +15,7 @@ import {
   Bell,
   ArrowLeft,
   User,
+  Send,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { useSellerAuth } from '../../contexts/SellerAuthContext';
@@ -25,6 +26,7 @@ import {
   replyToCustomerMessage,
 } from '../../lib/messages';
 import type { SellerMessage } from '../../types';
+import { Button } from '../ui/Button';
 
 function formatMessageDate(value: string) {
   if (!value) {
@@ -45,6 +47,10 @@ function getMessageBubbleClass(message: SellerMessage) {
     : 'bg-elevated text-body border border-subtle/20';
 }
 
+function getThreadKey(message: Pick<SellerMessage, 'customer' | 'product'>) {
+  return `${message.customer.id}:${message.product?.id || 'general'}`;
+}
+
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -53,11 +59,13 @@ export function AdminLayout() {
   const [messages, setMessages] = useState<SellerMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
-  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  const [replyingMessageId, setReplyingMessageId] = useState<string | null>(null);
+  const [drawerView, setDrawerView] = useState<'list' | 'chat'>('list');
+  const [selectedMessage, setSelectedMessage] = useState<SellerMessage | null>(null);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
 
   const messagePanelRef = useRef<HTMLDivElement | null>(null);
+  const notificationDrawerRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const location = useLocation();
@@ -88,22 +96,31 @@ export function AdminLayout() {
 
     setIsMessagesOpen(false);
     setIsProfileMenuOpen(false);
-    setReplyTargetId(null);
+    setDrawerView('list');
+    setSelectedMessage(null);
+    setReplyMessage('');
   }, [location.pathname, isMobile]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
       if (
+        isMessagesOpen &&
         messagePanelRef.current &&
-        !messagePanelRef.current.contains(event.target as Node)
+        !messagePanelRef.current.contains(target) &&
+        notificationDrawerRef.current &&
+        !notificationDrawerRef.current.contains(target)
       ) {
         setIsMessagesOpen(false);
-        setReplyTargetId(null);
+        setDrawerView('list');
+        setSelectedMessage(null);
+        setReplyMessage('');
       }
 
       if (
         profileMenuRef.current &&
-        !profileMenuRef.current.contains(event.target as Node)
+        !profileMenuRef.current.contains(target)
       ) {
         setIsProfileMenuOpen(false);
       }
@@ -114,7 +131,7 @@ export function AdminLayout() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [isMessagesOpen]);
 
   const navItems = [
     {
@@ -162,7 +179,6 @@ export function AdminLayout() {
     if (!token || !seller) {
       setMessages([]);
       setUnreadCount(0);
-      setReplyTargetId(null);
       return;
     }
 
@@ -183,6 +199,31 @@ export function AdminLayout() {
     loadMessages().catch(() => undefined);
   }, [loadMessages]);
 
+  const activeThreadMessages = useMemo(() => {
+    if (!selectedMessage) {
+      return [];
+    }
+
+    const selectedThreadKey = getThreadKey(selectedMessage);
+
+    return [...messages]
+      .filter((message) => getThreadKey(message) === selectedThreadKey)
+      .sort(
+        (firstMessage, secondMessage) =>
+          new Date(firstMessage.createdAt).getTime() -
+          new Date(secondMessage.createdAt).getTime()
+      );
+  }, [messages, selectedMessage]);
+
+  const adminName = seller?.businessName || 'Seller Account';
+  const adminInitial = (seller?.businessName || seller?.name || 'S')
+    .charAt(0)
+    .toUpperCase();
+  const profileImage = resolveApiUrl(seller?.profileImage || '');
+  const contentShiftClass = isMessagesOpen
+    ? 'lg:pr-[clamp(320px,25vw,420px)]'
+    : '';
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -194,65 +235,101 @@ export function AdminLayout() {
     setIsProfileMenuOpen(false);
 
     if (!nextOpenState) {
-      setReplyTargetId(null);
-    }
-
-    if (nextOpenState) {
-      await loadMessages();
-    }
-  };
-
-  const handleMarkRead = async (messageId: string) => {
-    if (!token) {
+      setDrawerView('list');
+      setSelectedMessage(null);
+      setReplyMessage('');
       return;
     }
 
-    try {
-      const updatedMessage = await markSellerMessageRead(token, messageId);
-      setMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.id === updatedMessage.id ? updatedMessage : message
-        )
-      );
-      setUnreadCount((currentCount) => Math.max(0, currentCount - 1));
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    }
+    setDrawerView('list');
+    setSelectedMessage(null);
+    setReplyMessage('');
+    await loadMessages();
   };
 
-  const handleReplyChange = (messageId: string, value: string) => {
-    setReplyDrafts((currentDrafts) => ({
-      ...currentDrafts,
-      [messageId]: value,
-    }));
+  const markThreadAsRead = useCallback(
+    async (threadMessages: SellerMessage[]) => {
+      if (!token || threadMessages.length === 0) {
+        return;
+      }
+
+      try {
+        const results = await Promise.all(
+          threadMessages.map(async (message) => {
+            try {
+              return await markSellerMessageRead(token, message.id);
+            } catch (error) {
+              console.error(getErrorMessage(error));
+              return null;
+            }
+          })
+        );
+
+        const updatedMessages = results.filter(
+          (message): message is SellerMessage => message !== null
+        );
+
+        if (updatedMessages.length === 0) {
+          return;
+        }
+
+        const updatedMessageMap = new Map(
+          updatedMessages.map((message) => [message.id, message])
+        );
+
+        setMessages((currentMessages) =>
+          currentMessages.map(
+            (message) => updatedMessageMap.get(message.id) ?? message
+          )
+        );
+        setUnreadCount((currentCount) =>
+          Math.max(0, currentCount - updatedMessages.length)
+        );
+      } catch (error) {
+        console.error(getErrorMessage(error));
+      }
+    },
+    [token]
+  );
+
+  const handleMessageSelect = async (message: SellerMessage) => {
+    setSelectedMessage(message);
+    setDrawerView('chat');
+    setReplyMessage('');
+
+    const unreadThreadMessages = messages.filter(
+      (currentMessage) =>
+        getThreadKey(currentMessage) === getThreadKey(message) &&
+        currentMessage.senderType === 'customer' &&
+        !currentMessage.isRead
+    );
+
+    await markThreadAsRead(unreadThreadMessages);
   };
 
-  const handleReplySubmit = async (messageId: string) => {
-    if (!token) {
+  const handleReplySubmit = async () => {
+    if (!token || !selectedMessage) {
       return;
     }
 
-    const replyMessage = replyDrafts[messageId]?.trim();
+    const trimmedReply = replyMessage.trim();
 
-    if (!replyMessage) {
+    if (!trimmedReply) {
       toast.error('Please enter a reply message');
       return;
     }
 
     try {
-      setReplyingMessageId(messageId);
-      const reply = await replyToCustomerMessage(token, messageId, replyMessage);
+      setIsSendingReply(true);
+      const reply = await replyToCustomerMessage(token, selectedMessage.id, trimmedReply);
       setMessages((currentMessages) => [reply, ...currentMessages]);
-      setReplyDrafts((currentDrafts) => ({
-        ...currentDrafts,
-        [messageId]: '',
-      }));
-      setReplyTargetId(null);
+      setSelectedMessage(reply);
+      setReplyMessage('');
       toast.success('Reply sent');
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
-      setReplyingMessageId(null);
+      setIsSendingReply(false);
     }
   };
 
@@ -265,11 +342,149 @@ export function AdminLayout() {
     return currentItem ? currentItem.name : 'Admin Panel';
   };
 
-  const adminName = seller?.businessName || 'Seller Account';
-  const adminInitial = (seller?.businessName || seller?.name || 'S')
-    .charAt(0)
-    .toUpperCase();
-  const profileImage = resolveApiUrl(seller?.profileImage || '');
+  const renderNotificationDrawer = () => {
+    if (drawerView === 'chat' && selectedMessage) {
+      return (
+        <>
+          <div className="border-b border-subtle/30 px-5 py-4">
+            <button
+              type="button"
+              onClick={() => {
+                setDrawerView('list');
+                setReplyMessage('');
+              }}
+              className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-body transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </button>
+            <div className="mt-3">
+              <p className="text-sm font-semibold text-primary">
+                {selectedMessage.customer.name}
+              </p>
+              <p className="mt-1 text-xs text-body">
+                {selectedMessage.product?.name
+                  ? `Re: ${selectedMessage.product.name}`
+                  : selectedMessage.customer.email}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5 custom-scrollbar">
+            {activeThreadMessages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.senderType === 'customer' ? 'justify-start' : 'justify-end'}`}
+              >
+                <div className="max-w-[88%]">
+                  <div
+                    className={`rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${getMessageBubbleClass(message)}`}
+                  >
+                    {message.message}
+                  </div>
+                  <p
+                    className={`mt-1 text-[11px] text-muted ${
+                      message.senderType === 'customer' ? 'text-left' : 'text-right'
+                    }`}
+                  >
+                    {formatMessageDate(message.createdAt)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleReplySubmit().catch(() => undefined);
+            }}
+            className="border-t border-subtle/30 px-5 py-4"
+          >
+            <div className="flex items-end gap-3">
+              <input
+                type="text"
+                value={replyMessage}
+                onChange={(event) => setReplyMessage(event.target.value)}
+                placeholder="Reply to this customer..."
+                className="min-w-0 flex-1 rounded-xl border border-subtle/40 bg-background px-3 py-2.5 text-sm text-primary placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                className="h-11 w-11"
+                isLoading={isSendingReply}
+                aria-label="Send reply"
+              >
+                {!isSendingReply && <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          </form>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="border-b border-subtle/30 bg-surface px-5 py-4">
+          <p className="text-sm font-semibold text-primary">Customer Messages</p>
+          <p className="mt-1 text-xs text-body">
+            Messages for {seller?.businessName || 'your store'}
+          </p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {isLoadingMessages && (
+            <div className="p-6 text-sm text-muted text-center">
+              Loading messages...
+            </div>
+          )}
+
+          {!isLoadingMessages && messages.length === 0 && (
+            <div className="p-6 text-sm text-muted text-center">
+              No customer messages yet.
+            </div>
+          )}
+
+          {!isLoadingMessages &&
+            messages.map((message) => (
+              <button
+                key={message.id}
+                type="button"
+                onClick={() => {
+                  handleMessageSelect(message).catch(() => undefined);
+                }}
+                className={`w-full border-b border-subtle/20 px-5 py-4 text-left transition-colors last:border-b-0 ${
+                  !message.isRead && message.senderType === 'customer'
+                    ? 'bg-accent-blue/5'
+                    : 'bg-transparent hover:bg-elevated/60'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-primary">
+                      {message.customer.name}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-body">
+                      {message.product?.name
+                        ? `Re: ${message.product.name}`
+                        : message.customer.email}
+                    </p>
+                  </div>
+                  <span className="whitespace-nowrap text-[11px] text-muted">
+                    {formatMessageDate(message.createdAt)}
+                  </span>
+                </div>
+
+                <p className="mt-3 max-h-11 overflow-hidden text-sm leading-relaxed text-body">
+                  {message.message}
+                </p>
+              </button>
+            ))}
+        </div>
+      </>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
@@ -364,217 +579,90 @@ export function AdminLayout() {
         </div>
       </motion.aside>
 
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="h-20 bg-accent-gold border-b border-accent-goldHover/40 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-30">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 text-background/70 hover:text-background rounded-lg hover:bg-background/10 transition-colors"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-            <h1 className="text-xl font-bold text-background hidden sm:block">
-              {getPageTitle()}
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-4 sm:gap-6">
-            <div className="relative" ref={messagePanelRef}>
+      <div className={`flex-1 flex flex-col min-w-0 h-screen overflow-hidden transition-[padding-right] duration-300 ${contentShiftClass}`}>
+        <header className="sticky top-0 z-30 transition-all duration-300 glass-panel">
+          <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-4">
               <button
-                type="button"
-                onClick={handleMessagesToggle}
-                className="relative p-2 text-background/70 hover:text-background rounded-full hover:bg-background/10 transition-colors"
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-full text-primary transition-colors hover:text-accent-gold"
               >
-                <Bell className="w-5 h-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-status-error text-background text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-accent-gold">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
+                <Menu className="w-6 h-6" />
               </button>
-
-              {isMessagesOpen && (
-                <div className="absolute right-0 mt-3 w-[360px] max-w-[calc(100vw-2rem)] bg-surface border border-subtle/30 rounded-xl shadow-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-subtle/30 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-primary">Customer Messages</p>
-                      <p className="text-xs text-muted">
-                        Messages for {seller?.businessName || 'your store'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                    {isLoadingMessages && (
-                      <div className="p-6 text-sm text-muted text-center">
-                        Loading messages...
-                      </div>
-                    )}
-
-                    {!isLoadingMessages && messages.length === 0 && (
-                      <div className="p-6 text-sm text-muted text-center">
-                        No customer messages yet.
-                      </div>
-                    )}
-
-                    {!isLoadingMessages &&
-                      messages.map((message) => (
-                        <div
-                          key={message.id}
-                          className={`px-4 py-4 border-b border-subtle/20 last:border-b-0 ${
-                            !message.isRead && message.senderType === 'customer'
-                              ? 'bg-accent-blue/5'
-                              : 'bg-transparent'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-primary truncate">
-                                {message.senderType === 'customer'
-                                  ? message.customer.name
-                                  : seller?.businessName || 'You'}
-                              </p>
-                              <p className="text-xs text-muted truncate">
-                                {message.senderType === 'customer'
-                                  ? message.customer.email
-                                  : 'Reply sent from your store'}
-                              </p>
-                            </div>
-                            <span className="text-[11px] text-muted whitespace-nowrap">
-                              {formatMessageDate(message.createdAt)}
-                            </span>
-                          </div>
-
-                          {message.product?.name && (
-                            <p className="text-xs text-accent-blue mt-2">
-                              Re: {message.product.name}
-                            </p>
-                          )}
-
-                          <div
-                            className={`mt-2 flex ${
-                              message.senderType === 'customer'
-                                ? 'justify-start'
-                                : 'justify-end'
-                            }`}
-                          >
-                            <div
-                              className={`max-w-[88%] rounded-xl px-3 py-2.5 text-sm leading-relaxed ${getMessageBubbleClass(message)}`}
-                            >
-                              {message.message}
-                            </div>
-                          </div>
-
-                          {message.senderType === 'customer' && (
-                            <div className="mt-3 flex items-center gap-4">
-                              {!message.isRead && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMarkRead(message.id)}
-                                  className="text-xs text-accent-gold hover:text-accent-goldHover transition-colors"
-                                >
-                                  Mark as read
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setReplyTargetId((currentId) =>
-                                    currentId === message.id ? null : message.id
-                                  )
-                                }
-                                className="text-xs text-accent-blue hover:text-accent-blueHover transition-colors"
-                              >
-                                Reply
-                              </button>
-                            </div>
-                          )}
-
-                          {replyTargetId === message.id && (
-                            <div className="mt-3 space-y-3">
-                              <textarea
-                                value={replyDrafts[message.id] || ''}
-                                onChange={(event) =>
-                                  handleReplyChange(message.id, event.target.value)
-                                }
-                                rows={3}
-                                className="w-full bg-background border border-subtle/50 rounded-lg text-primary px-3 py-2 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent-blue/50 focus:border-accent-blue transition-all"
-                                placeholder="Reply to this customer..."
-                              />
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setReplyTargetId(null)}
-                                  className="text-xs text-muted hover:text-primary transition-colors"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleReplySubmit(message.id)}
-                                  disabled={replyingMessageId === message.id}
-                                  className="text-xs text-accent-gold hover:text-accent-goldHover transition-colors disabled:opacity-50"
-                                >
-                                  {replyingMessageId === message.id ? 'Sending...' : 'Send reply'}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
+              <h1 className="hidden text-xl font-bold text-primary sm:block">
+                {getPageTitle()}
+              </h1>
             </div>
 
-            <div className="h-8 w-px bg-background/20" />
-
-            <div className="relative" ref={profileMenuRef}>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsProfileMenuOpen((currentState) => !currentState);
-                  setIsMessagesOpen(false);
-                  setReplyTargetId(null);
-                }}
-                className="flex items-center gap-3"
-              >
-                <div className="hidden sm:block text-right">
-                  <p className="text-sm font-medium text-background">{adminName}</p>
-                  <p className="text-xs text-background/70">Seller</p>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-accent-gold font-bold text-lg shadow-lg shadow-background/20 overflow-hidden">
-                  {profileImage ? (
-                    <img
-                      src={profileImage}
-                      alt={adminName}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    adminInitial
+            <div className="relative flex items-center gap-3 sm:gap-4">
+              <div className="relative" ref={messagePanelRef}>
+                <button
+                  type="button"
+                  onClick={handleMessagesToggle}
+                  className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
+                    isMessagesOpen ? 'text-accent-gold hover:text-accent-gold' : 'text-primary hover:text-accent-gold'
+                  }`}
+                >
+                  <Bell className="w-[22px] h-[22px]" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-accent-gold text-background text-[10px] font-bold flex items-center justify-center rounded-full">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
                   )}
-                </div>
-              </button>
+                </button>
+              </div>
 
-              {isProfileMenuOpen && (
-                <div className="absolute right-0 mt-3 w-48 bg-surface border border-subtle/30 rounded-xl shadow-xl overflow-hidden">
-                  <Link
-                    to="/admin/account"
-                    className="flex items-center gap-3 px-4 py-3 text-sm text-body hover:bg-elevated transition-colors"
-                  >
-                    <User className="w-4 h-4" />
-                    <span>Account Details</span>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-status-error hover:bg-status-error/10 transition-colors"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
-                </div>
-              )}
+              <div className="h-8 w-px bg-subtle/30" />
+
+              <div className="relative" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileMenuOpen((currentState) => !currentState);
+                    setIsMessagesOpen(false);
+                    setDrawerView('list');
+                    setSelectedMessage(null);
+                    setReplyMessage('');
+                  }}
+                  className="flex items-center gap-3"
+                >
+                  <div className="hidden h-10 sm:flex flex-col items-end justify-center text-right">
+                    <p className="text-sm font-medium text-primary leading-tight">{adminName}</p>
+                    <p className="text-xs text-muted leading-tight">Seller</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-[#926C15] font-bold text-lg shadow-lg shadow-background/20 overflow-hidden">
+                    {profileImage ? (
+                      <img
+                        src={profileImage}
+                        alt={adminName}
+                        className="w-full h-full rounded-full object-cover"
+                      />
+                    ) : (
+                      adminInitial
+                    )}
+                  </div>
+                </button>
+
+                {isProfileMenuOpen && (
+                  <div className="absolute right-0 mt-3 w-48 bg-surface border border-subtle/30 rounded-xl shadow-xl overflow-hidden">
+                    <Link
+                      to="/admin/account"
+                      className="flex items-center gap-3 px-4 py-3 text-sm text-body hover:bg-elevated transition-colors"
+                    >
+                      <User className="w-4 h-4" />
+                      <span>Account Details</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm text-status-error hover:bg-status-error/10 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -583,6 +671,37 @@ export function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      <AnimatePresence>
+        {isMessagesOpen && (
+          <>
+            {isMobile && (
+              <motion.button
+                type="button"
+                aria-label="Close customer messages"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsMessagesOpen(false)}
+                className="fixed inset-0 z-[38] bg-black/45 lg:hidden"
+              />
+            )}
+
+            <motion.div
+              ref={notificationDrawerRef}
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="fixed bottom-0 right-0 top-20 z-[39] w-full sm:w-[420px] lg:w-[clamp(320px,25vw,420px)]"
+            >
+              <div className="flex h-full flex-col border-l border-subtle/30 bg-surface shadow-2xl shadow-black/40">
+                {renderNotificationDrawer()}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <Toaster
         theme="dark"
@@ -597,8 +716,3 @@ export function AdminLayout() {
     </div>
   );
 }
-
-
-
-
-

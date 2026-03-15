@@ -3,6 +3,8 @@ import {
   registerUser,
   loginUser,
   getMe,
+  getSavedAddresses,
+  deleteSavedAddress,
   updateProfile,
   updateAvatar,
   changePassword,
@@ -16,6 +18,8 @@ router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.post('/newsletter/subscribe', subscribeToNewsletter);
 router.get('/me', protect, getMe);
+router.get('/addresses', protect, getSavedAddresses);
+router.delete('/addresses/:id', protect, deleteSavedAddress);
 router.put('/profile', protect, updateProfile);
 router.put('/profile/avatar', protect, updateAvatar);
 router.put('/password', protect, changePassword);

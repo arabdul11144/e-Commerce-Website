@@ -149,11 +149,28 @@ async function loadSellerOrders(
 ) {
   const orders = await Order.find(filter)
     .populate('user', 'name email status role createdAt avatar')
-    .populate('items.product', 'name category seller price discountPrice')
+    .populate('items.product', 'name brand category seller price discountPrice images')
     .sort({ createdAt: -1 })
     .lean();
 
   return orders.filter((order) => orderIncludesSeller(order, sellerId));
+}
+
+function getSellerOrderProducts(order: any, sellerId: string) {
+  return getSellerScopedItems(order, sellerId).map((item: any) => {
+    const product = item?.product;
+
+    return {
+      id: getIdString(product),
+      name: product?.name || 'Product unavailable',
+      brand: product?.brand || '',
+      image:
+        Array.isArray(product?.images) && typeof product.images[0] === 'string'
+          ? product.images[0]
+          : '',
+      quantity: Math.max(1, Number(item?.quantity) || 1),
+    };
+  });
 }
 
 function buildRevenueOverview(orders: any[], sellerId: string) {
@@ -533,6 +550,7 @@ export const getOrders = async (req: SellerAuthRequest, res: Response) => {
           date: formatDate(order.createdAt),
           total: Number(getSellerOrderTotal(order, sellerId) || 0),
           items: getSellerOrderItemCount(order, sellerId),
+          products: getSellerOrderProducts(order, sellerId),
           status: order.status || 'pending',
           payment: order.paymentStatus || 'pending',
         };
@@ -590,7 +608,7 @@ export const getOrderDetails = async (req: SellerAuthRequest, res: Response) => 
 
     const order = await Order.findById(req.params.id)
       .populate('user', 'name email status role createdAt avatar')
-      .populate('items.product', 'name category seller price discountPrice');
+      .populate('items.product', 'name brand category seller price discountPrice images');
 
     if (!order) {
       res.status(404).json({ message: 'Order not found' });

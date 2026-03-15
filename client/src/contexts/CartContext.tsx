@@ -162,7 +162,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           {
             method: 'PUT',
             token,
-            body: JSON.stringify({ quantity: normalizeQuantity(quantity, 0) }),
+            body: JSON.stringify({ quantity: Math.max(1, normalizeQuantity(quantity)) }),
           }
         );
 

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { User, Package, MapPin, LogOut, Pencil, X } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { CreditCard, LogOut, Package, Pencil, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../contexts/AuthContext';
-import { apiRequest, getErrorMessage } from '../lib/api';
+import { apiRequest, getErrorMessage, resolveApiUrl } from '../lib/api';
 import { formatCurrency } from '../utils/product';
 
 interface ProfileFormState {
@@ -29,8 +29,19 @@ interface UpdatedProfileResponse {
   avatar?: string;
 }
 
+interface AccountOrderProduct {
+  id?: string;
+  _id?: string;
+  slug?: string;
+  name?: string;
+  brand?: string;
+  images?: string[];
+}
+
 interface AccountOrderItem {
   quantity?: number;
+  price?: number;
+  product?: AccountOrderProduct | null;
 }
 
 interface AccountOrder {
@@ -58,10 +69,28 @@ interface AccountAddress {
   city: string;
   state: string;
   zip: string;
-  country: string;
+  country?: string;
   phone?: string;
   isDefault: boolean;
 }
+
+type AccountTab =
+  | 'account-details'
+  | 'my-orders'
+  | 'order-history'
+  | 'addresses'
+  | 'card-details';
+
+interface AccountLocationState {
+  activeTab?: 'profile' | 'orders' | 'addresses' | AccountTab;
+}
+
+const AUTH_STORAGE_KEY = 'techvault.auth';
+const CANCELLABLE_ORDER_STATUSES = new Set<AccountOrder['status']>([
+  'pending',
+  'processing',
+  'confirmed',
+]);
 
 function formatOrderDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -87,41 +116,83 @@ function getOrderItemCount(items: AccountOrder['items']) {
   return items.reduce((total, item) => total + Math.max(1, Number(item.quantity) || 1), 0);
 }
 
-const AUTH_STORAGE_KEY = 'techvault.auth';
+function isOrderCancellable(status: AccountOrder['status']) {
+  return CANCELLABLE_ORDER_STATUSES.has(status);
+}
+
+function getOrderItemImage(item: AccountOrderItem) {
+  return item.product?.images?.[0] ? resolveApiUrl(item.product.images[0]) : '';
+}
+
+function getOrderItemLineTotal(item: AccountOrderItem) {
+  const quantity = Math.max(1, Number(item.quantity) || 1);
+  const price = Number(item.price) || 0;
+  return quantity * price;
+}
+
+function mapLocationStateToTab(value?: AccountLocationState['activeTab']): AccountTab {
+  switch (value) {
+    case 'profile':
+    case 'account-details':
+    case 'addresses':
+      return 'account-details';
+    case 'order-history':
+      return 'order-history';
+    case 'card-details':
+      return 'card-details';
+    case 'orders':
+    case 'my-orders':
+    default:
+      return 'my-orders';
+  }
+}
 
 export function Account() {
-  const [activeTab, setActiveTab] = useState('profile');
+  const { user, token, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const authUser = user as (typeof user & { avatar?: string }) | null;
+  const locationState = location.state as AccountLocationState | null;
+
+  const [activeTab, setActiveTab] = useState<AccountTab>(() =>
+    mapLocationStateToTab(locationState?.activeTab)
+  );
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileImage, setProfileImage] = useState<string>('');
   const [isPhotoMenuOpen, setIsPhotoMenuOpen] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [orders, setOrders] = useState<AccountOrder[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<AccountAddress[]>([]);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [removingAddressId, setRemovingAddressId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const photoMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const { user, token, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const authUser = (user as (typeof user & { avatar?: string }) | null);
-
   const tabs = [
-    { id: 'orders', label: 'My Orders', icon: Package },
-    { id: 'addresses', label: 'Addresses', icon: MapPin },
+    { id: 'account-details' as const, label: 'Account details', icon: User },
+    { id: 'my-orders' as const, label: 'My orders', icon: Package },
+    { id: 'order-history' as const, label: 'Order history', icon: Package },
+    { id: 'sign-out' as const, label: 'Sign out', icon: LogOut },
+    { id: 'card-details' as const, label: 'Card details', icon: CreditCard },
   ];
 
-  const [orders, setOrders] = useState<AccountOrder[]>([]);
-  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
-
-  const profileData = useMemo(() => ({
-    fullName: user?.name ?? '',
-    firstName: user?.firstName ?? '',
-    lastName: user?.lastName ?? '',
-    email: user?.email ?? '',
-    phone: user?.phone ?? '',
-    avatar: authUser?.avatar ?? '',
-  }), [user, authUser]);
+  const profileData = useMemo(
+    () => ({
+      fullName: user?.name ?? '',
+      firstName: user?.firstName ?? '',
+      lastName: user?.lastName ?? '',
+      email: user?.email ?? '',
+      phone: user?.phone ?? '',
+      avatar: authUser?.avatar ?? '',
+    }),
+    [user, authUser]
+  );
 
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     firstName: '',
@@ -130,6 +201,25 @@ export function Account() {
     phone: '',
     password: '',
   });
+
+  useEffect(() => {
+    if (locationState?.activeTab) {
+      setActiveTab(mapLocationStateToTab(locationState.activeTab));
+    }
+  }, [locationState?.activeTab]);
+
+  useEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     setProfileForm({
@@ -160,7 +250,9 @@ export function Account() {
   }, []);
 
   useEffect(() => {
-    if (activeTab !== 'orders' && activeTab !== 'addresses') {
+    const shouldLoadOrders = activeTab === 'my-orders' || activeTab === 'order-history';
+
+    if (!shouldLoadOrders) {
       return;
     }
 
@@ -196,52 +288,42 @@ export function Account() {
     };
   }, [activeTab, token]);
 
-  const savedAddresses = useMemo<AccountAddress[]>(() => {
-    const uniqueAddresses = new Map<string, AccountAddress>();
+  useEffect(() => {
+    if (activeTab !== 'account-details' && activeTab !== 'addresses') {
+      return;
+    }
 
-    orders.forEach((order) => {
-      const shippingAddress = order.shippingAddress;
+    if (!token) {
+      setSavedAddresses([]);
+      setIsLoadingAddresses(false);
+      return;
+    }
 
-      if (
-        !shippingAddress?.street ||
-        !shippingAddress.city ||
-        !shippingAddress.state ||
-        !shippingAddress.zip
-      ) {
-        return;
-      }
+    let isCancelled = false;
+    setIsLoadingAddresses(true);
 
-      const addressKey = [
-        shippingAddress.fullName || profileData.fullName,
-        shippingAddress.street,
-        shippingAddress.city,
-        shippingAddress.state,
-        shippingAddress.zip,
-        shippingAddress.country || '',
-        shippingAddress.phone || '',
-      ]
-        .map((value) => String(value || '').trim().toLowerCase())
-        .join('|');
-
-      if (uniqueAddresses.has(addressKey)) {
-        return;
-      }
-
-      uniqueAddresses.set(addressKey, {
-        id: `${order._id}-${uniqueAddresses.size}`,
-        fullName: shippingAddress.fullName || profileData.fullName,
-        street: shippingAddress.street,
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        zip: shippingAddress.zip,
-        country: shippingAddress.country || '',
-        phone: shippingAddress.phone || '',
-        isDefault: uniqueAddresses.size === 0,
+    apiRequest<AccountAddress[]>('/api/auth/addresses', { token })
+      .then((response) => {
+        if (!isCancelled) {
+          setSavedAddresses(response);
+        }
+      })
+      .catch((error) => {
+        if (!isCancelled) {
+          setSavedAddresses([]);
+          toast.error(getErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingAddresses(false);
+        }
       });
-    });
 
-    return Array.from(uniqueAddresses.values());
-  }, [orders, profileData.fullName]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTab, token]);
 
   const syncStoredSession = (updatedUser: UpdatedProfileResponse) => {
     const storedSessionRaw = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -278,6 +360,55 @@ export function Account() {
         [field]: event.target.value,
       }));
     };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!token) {
+      toast.error('Please sign in again.');
+      return;
+    }
+
+    try {
+      setCancellingOrderId(orderId);
+      const updatedOrder = await apiRequest<AccountOrder>(
+        `/api/orders/${encodeURIComponent(orderId)}/cancel`,
+        {
+          method: 'PUT',
+          token,
+        }
+      );
+      setOrders((currentOrders) =>
+        currentOrders.map((order) => (order._id === updatedOrder._id ? updatedOrder : order))
+      );
+      toast.success('Order cancelled successfully');
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  const handleRemoveSavedAddress = async (addressId: string) => {
+    if (!token) {
+      toast.error('Please sign in again.');
+      return;
+    }
+
+    try {
+      setRemovingAddressId(addressId);
+      await apiRequest(`/api/auth/addresses/${encodeURIComponent(addressId)}`, {
+        method: 'DELETE',
+        token,
+      });
+      setSavedAddresses((currentAddresses) =>
+        currentAddresses.filter((address) => address.id !== addressId)
+      );
+      toast.success('Saved address removed');
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setRemovingAddressId(null);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -440,272 +571,356 @@ export function Account() {
     }
   };
 
-  return (
-    <>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-3xl font-bold text-primary">My Account</h1>
+  const renderOrdersPanel = (title: 'My Orders' | 'Order History') => (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex items-center justify-between gap-4 p-6 pb-0 md:p-8 md:pb-0">
+        <h2 className="text-2xl font-bold text-primary">{title}</h2>
+      </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            {activeTab !== 'profile' && (
-              <Button variant="outline" onClick={() => setActiveTab('profile')}>
-                Account Details
-              </Button>
-            )}
-            <Button variant="danger" onClick={handleLogout}>
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+        {isLoadingOrders ? (
+          <div className="py-10 text-center text-body">Loading orders...</div>
+        ) : orders.length > 0 ? (
+          <div className="space-y-4">
+            {orders.map((order) => (
+              <div key={order._id} className="rounded-xl border border-subtle/30 p-6">
+                <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="font-bold text-primary">{order._id}</h3>
+                    <p className="text-sm text-muted">Placed on {formatOrderDate(order.createdAt)}</p>
+                  </div>
 
-        <div className="flex flex-col md:flex-row md:items-stretch gap-8">
-          <div className="md:w-64 flex-shrink-0">
-            <Card className="overflow-hidden h-full">
-              <div className="p-6 border-b border-subtle/30 text-center">
-                <div className="relative inline-block" ref={photoMenuRef}>
-                  <button
-                    type="button"
-                    onClick={handleProfileIconClick}
-                    disabled={isUploadingPhoto}
-                    className="w-20 h-20 bg-accent-blue/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-accent-blue/30 overflow-hidden disabled:opacity-70"
-                  >
-                    {profileImage ? (
-                      <img
-                        src={profileImage}
-                        alt="Profile"
-                        className="w-full h-full object-cover rounded-full"
-                      />
-                    ) : (
-                      <User className="w-10 h-10 text-accent-blue" />
-                    )}
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <span className="font-bold text-primary">
+                      {formatCurrency(order.total, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
 
-                  {isPhotoMenuOpen && (
-                    <div className="absolute left-1/2 -translate-x-1/2 mt-1 w-52 bg-background border border-subtle/30 rounded-xl shadow-lg z-20 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={handleRemoveProfilePhoto}
-                        className="w-full text-left px-4 py-3 text-sm text-body hover:bg-elevated transition-colors"
-                      >
-                        Remove Profile Picture
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleTakePhoto}
-                        className="w-full text-left px-4 py-3 text-sm text-body hover:bg-elevated transition-colors"
-                      >
-                        Take Photo
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleBrowsePhoto}
-                        className="w-full text-left px-4 py-3 text-sm text-body hover:bg-elevated transition-colors"
-                      >
-                        Browse From Computer
-                      </button>
-                    </div>
-                  )}
-
-                  <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="user"
-                    className="hidden"
-                    onChange={handleProfileImageChange}
-                  />
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleProfileImageChange}
-                  />
+                    <Badge variant={getOrderStatusVariant(order.status)}>{order.status}</Badge>
+                  </div>
                 </div>
 
-                <h3 className="font-bold text-primary">{profileData.fullName}</h3>
-                <p className="text-sm text-muted">{profileData.email}</p>
-              </div>
+                <div className="space-y-3 border-t border-subtle/20 pt-4">
+                  {order.items.map((item, index) => {
+                    const imageSrc = getOrderItemImage(item);
+                    const quantity = Math.max(1, Number(item.quantity) || 1);
+                    const lineTotal = getOrderItemLineTotal(item);
 
-              <nav className="flex flex-col p-2">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === tab.id
-                        ? 'bg-accent-gold/10 text-accent-gold'
-                        : 'text-body hover:bg-elevated hover:text-primary'
-                    }`}
+                    return (
+                      <div
+                        key={`${order._id}-${item.product?._id || item.product?.id || index}`}
+                        className="flex items-center gap-4"
+                      >
+                        <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-subtle/20 bg-elevated">
+                          {imageSrc ? (
+                            <img
+                              src={imageSrc}
+                              alt={item.product?.name || 'Ordered product'}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Package className="h-6 w-6 text-muted" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-1 font-medium text-primary">
+                            {item.product?.name || 'Product unavailable'}
+                          </p>
+                          <p className="line-clamp-1 text-sm text-muted">
+                            {item.product?.brand || 'Product details unavailable'}
+                          </p>
+                          <p className="mt-1 text-sm text-body">Qty: {quantity}</p>
+                        </div>
+
+                        <span className="whitespace-nowrap text-sm font-medium text-primary">
+                          {formatCurrency(lineTotal, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 border-t border-subtle/30 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm text-body">{getOrderItemCount(order.items)} item(s)</span>
+
+                  <Button
+                    variant={isOrderCancellable(order.status) ? 'danger' : 'outline'}
+                    size="sm"
+                    onClick={() => handleCancelOrder(order._id)}
+                    disabled={cancellingOrderId === order._id || !isOrderCancellable(order.status)}
                   >
-                    <tab.icon className="w-5 h-5" />
-                    {tab.label}
-                  </button>
-                ))}
-
-
-              </nav>
-            </Card>
-          </div>
-
-          <div className="flex-1 flex">
-            {activeTab === 'profile' && (
-              <Card className="p-6 md:p-8 w-full h-full">
-                <div className="flex justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-primary">
-                    Personal Information
-                  </h2>
-
-                  <Button onClick={openEditModal}>
-                    <Pencil className="w-4 h-4 mr-2" />
-                    Edit User Details
+                    {order.status === 'cancelled'
+                      ? 'Cancelled'
+                      : cancellingOrderId === order._id
+                        ? 'Cancelling...'
+                        : 'Cancel Order'}
                   </Button>
                 </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-subtle/30 p-6 text-body">
+            You have not placed any orders yet.
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
-                  <Input label="First Name" value={profileData.firstName} readOnly />
-                  <Input label="Last Name" value={profileData.lastName} readOnly />
+  const renderActivePanel = () => {
+    if (activeTab === 'account-details') {
+      return (
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-4 p-6 pb-0 md:p-8 md:pb-0">
+            <h2 className="text-2xl font-bold text-primary">Personal Information</h2>
 
-                  <Input
-                    label="Email Address"
-                    type="email"
-                    value={profileData.email}
-                    className="md:col-span-2"
-                    readOnly
-                  />
+            <Button onClick={openEditModal}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit User Details
+            </Button>
+          </div>
 
-                  <Input
-                    label="Phone Number"
-                    type="tel"
-                    value={profileData.phone}
-                    className="md:col-span-2"
-                    readOnly
-                  />
-                </div>
-              </Card>
-            )}
+          <div className="min-h-0 flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+            <div className="grid max-w-2xl grid-cols-1 gap-6 md:grid-cols-2">
+              <Input label="First Name" value={profileData.firstName} readOnly />
+              <Input label="Last Name" value={profileData.lastName} readOnly />
+              <Input
+                label="Email Address"
+                type="email"
+                value={profileData.email}
+                className="md:col-span-2"
+                readOnly
+              />
+              <Input
+                label="Phone Number"
+                type="tel"
+                value={profileData.phone}
+                className="md:col-span-2"
+                readOnly
+              />
+            </div>
 
-            {activeTab === 'orders' && (
-              <Card className="p-6 md:p-8 w-full h-full">
-                <h2 className="text-2xl font-bold text-primary mb-6">
-                  Order History
-                </h2>
+            <div className="mt-8">
+              <h3 className="text-2xl font-bold text-primary">Saved Addresses</h3>
+            </div>
 
-                {isLoadingOrders ? (
-                  <div className="py-10 text-center text-body">Loading orders...</div>
-                ) : orders.length > 0 ? (
-                  <div className="space-y-4">
-                    {orders.map((order) => (
-                      <div key={order._id} className="border border-subtle/30 rounded-xl p-6">
-                        <div className="flex justify-between mb-4">
-                          <div>
-                            <h3 className="font-bold text-primary">{order._id}</h3>
-                            <p className="text-sm text-muted">
-                              Placed on {formatOrderDate(order.createdAt)}
-                            </p>
-                          </div>
+            <div className="mt-6">
+              {isLoadingAddresses ? (
+                <div className="py-10 text-center text-body">Loading addresses...</div>
+              ) : savedAddresses.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {savedAddresses.map((address, index) => (
+                    <div
+                      key={address.id}
+                      className={`relative rounded-xl p-6 ${
+                        address.isDefault || index === 0
+                          ? 'border border-accent-gold'
+                          : 'border border-subtle/30'
+                      }`}
+                    >
+                      {(address.isDefault || index === 0) && (
+                        <Badge variant="gold" className="absolute right-4 top-4">
+                          Default
+                        </Badge>
+                      )}
 
-                          <div className="flex items-center gap-4">
-                            <span className="font-bold text-primary">
-                              {formatCurrency(order.total, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
+                      <h3 className="mb-2 font-bold text-primary">{address.fullName}</h3>
 
-                            <Badge variant={getOrderStatusVariant(order.status)}>
-                              {order.status}
-                            </Badge>
-                          </div>
-                        </div>
+                      <p className="text-sm leading-relaxed text-body">
+                        {address.street}
+                        <br />
+                        {address.city}, {address.state} {address.zip}
+                        {address.country ? (
+                          <>
+                            <br />
+                            {address.country}
+                          </>
+                        ) : null}
+                        {address.phone ? (
+                          <>
+                            <br />
+                            {address.phone}
+                          </>
+                        ) : null}
+                      </p>
 
-                        <div className="flex justify-between pt-4 border-t border-subtle/30">
-                          <span className="text-sm text-body">
-                            {getOrderItemCount(order.items)} item(s)
-                          </span>
-
-                          <Button variant="outline" size="sm">
-                            View Details
-                          </Button>
-                        </div>
+                      <div className="mt-4 flex justify-end border-t border-subtle/20 pt-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemoveSavedAddress(address.id)}
+                          disabled={removingAddressId === address.id}
+                        >
+                          {removingAddressId === address.id ? 'Removing...' : 'Remove'}
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="border border-subtle/30 rounded-xl p-6 text-body">
-                    You have not placed any orders yet.
-                  </div>
-                )}
-              </Card>
-            )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-subtle/30 p-6 text-body">
+                  No saved addresses yet. Your completed checkout addresses will appear here.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
-            {activeTab === 'addresses' && (
-              <Card className="p-6 md:p-8 w-full h-full">
-                <h2 className="text-2xl font-bold text-primary mb-6">
-                  Saved Addresses
-                </h2>
+    if (activeTab === 'my-orders') {
+      return renderOrdersPanel('My Orders');
+    }
 
-                {isLoadingOrders ? (
-                  <div className="py-10 text-center text-body">Loading addresses...</div>
-                ) : savedAddresses.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {savedAddresses.map((address) => (
-                      <div
-                        key={address.id}
-                        className={`rounded-xl p-6 relative ${
-                          address.isDefault
-                            ? 'border border-accent-gold'
-                            : 'border border-subtle/30'
+    if (activeTab === 'order-history') {
+      return renderOrdersPanel('Order History');
+    }
+
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="p-6 pb-0 md:p-8 md:pb-0">
+          <h2 className="text-2xl font-bold text-primary">Card Details</h2>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+          <div className="rounded-xl border border-subtle/30 p-6 text-body">
+            No saved card details yet.
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <div className="h-[calc(100vh-5rem)] overflow-hidden">
+        <div className="mx-auto h-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col gap-8 md:flex-row">
+              <div className="min-h-0 flex-shrink-0 md:h-full md:w-64">
+                <Card className="flex min-h-0 flex-col overflow-hidden md:h-full">
+                  <div className="border-b border-subtle/30 p-6 text-center">
+                    <div className="relative inline-block" ref={photoMenuRef}>
+                      <button
+                        type="button"
+                        onClick={handleProfileIconClick}
+                        disabled={isUploadingPhoto}
+                        className="mx-auto mb-4 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-accent-blue/30 bg-accent-blue/20 disabled:opacity-70"
+                      >
+                        {profileImage ? (
+                          <img
+                            src={profileImage}
+                            alt="Profile"
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <User className="h-10 w-10 text-accent-blue" />
+                        )}
+                      </button>
+
+                      {isPhotoMenuOpen && (
+                        <div className="absolute left-1/2 z-20 mt-1 w-52 -translate-x-1/2 overflow-hidden rounded-xl border border-subtle/30 bg-background shadow-lg">
+                          <button
+                            type="button"
+                            onClick={handleRemoveProfilePhoto}
+                            className="w-full px-4 py-3 text-left text-sm text-body transition-colors hover:bg-elevated"
+                          >
+                            Remove Profile Picture
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleTakePhoto}
+                            className="w-full px-4 py-3 text-left text-sm text-body transition-colors hover:bg-elevated"
+                          >
+                            Take Photo
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleBrowsePhoto}
+                            className="w-full px-4 py-3 text-left text-sm text-body transition-colors hover:bg-elevated"
+                          >
+                            Browse From Computer
+                          </button>
+                        </div>
+                      )}
+
+                      <input
+                        ref={cameraInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="user"
+                        className="hidden"
+                        onChange={handleProfileImageChange}
+                      />
+
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleProfileImageChange}
+                      />
+                    </div>
+
+                    <h3 className="font-bold text-primary">{profileData.fullName}</h3>
+                    <p className="text-sm text-muted">{profileData.email}</p>
+                  </div>
+
+                  <nav className="flex-1 p-2">
+                    {tabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          if (tab.id === 'sign-out') {
+                            handleLogout();
+                            return;
+                          }
+
+                          setActiveTab(tab.id);
+                        }}
+                        className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
+                          tab.id === 'sign-out'
+                            ? 'text-status-error hover:bg-status-error/10'
+                            : activeTab === tab.id
+                              ? 'bg-accent-gold/10 text-accent-gold'
+                              : 'text-body hover:bg-elevated hover:text-primary'
                         }`}
                       >
-                        {address.isDefault && (
-                          <Badge variant="gold" className="absolute top-4 right-4">
-                            Default
-                          </Badge>
-                        )}
-
-                        <h3 className="font-bold text-primary mb-2">
-                          {address.fullName}
-                        </h3>
-
-                        <p className="text-sm text-body leading-relaxed">
-                          {address.street}
-                          <br />
-                          {address.city}, {address.state} {address.zip}
-                          <br />
-                          {address.country || 'Sri Lanka'}
-                          {address.phone ? (
-                            <>
-                              <br />
-                              {address.phone}
-                            </>
-                          ) : null}
-                        </p>
-                      </div>
+                        <tab.icon className="h-5 w-5" />
+                        {tab.label}
+                      </button>
                     ))}
-                  </div>
-                ) : (
-                  <div className="border border-subtle/30 rounded-xl p-6 text-body">
-                    No saved addresses yet. Your completed checkout addresses will appear here.
-                  </div>
-                )}
-              </Card>
-            )}
+                  </nav>
+                </Card>
+              </div>
+
+              <div className="min-h-0 flex-1">
+                <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+                  {renderActivePanel()}
+                </Card>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center px-4 py-6">
-          <div className="w-full max-w-2xl rounded-2xl border border-subtle/30 bg-surface shadow-2xl shadow-black/50 overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-subtle/30">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-subtle/30 bg-surface shadow-2xl shadow-black/50">
+            <div className="flex items-center justify-between border-b border-subtle/30 px-6 py-5">
               <div>
                 <h2 className="text-xl font-bold text-primary">Edit User Details</h2>
-                <p className="text-sm text-muted mt-1">
+                <p className="mt-1 text-sm text-muted">
                   Update your profile information using your current password.
                 </p>
               </div>
@@ -713,14 +928,14 @@ export function Account() {
                 type="button"
                 onClick={closeEditModal}
                 disabled={isSavingProfile}
-                className="p-2 rounded-lg text-muted hover:text-primary hover:bg-elevated transition-colors disabled:opacity-50"
+                className="rounded-lg p-2 text-muted transition-colors hover:bg-elevated hover:text-primary disabled:opacity-50"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleProfileUpdate}>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
                 <Input
                   label="First Name"
                   value={profileForm.firstName}
@@ -759,7 +974,7 @@ export function Account() {
                 />
               </div>
 
-              <div className="px-6 py-5 border-t border-subtle/30 flex items-center justify-end gap-3 bg-surface">
+              <div className="flex items-center justify-end gap-3 border-t border-subtle/30 bg-surface px-6 py-5">
                 <Button
                   type="button"
                   variant="outline"

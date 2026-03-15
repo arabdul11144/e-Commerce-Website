@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import User from '../models/User';
+import User, { type IUserSavedAddress } from '../models/User';
+import Order from '../models/Order';
 import { AuthRequest } from '../middlewares/auth.middleware';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -15,6 +16,63 @@ const generateToken = (id: string) => {
 
 function getNewsletterSubscriptionsCollection() {
   return mongoose.connection.collection('newsletterSubscriptions');
+}
+
+function normalizeSavedAddress(value: unknown): Omit<IUserSavedAddress, '_id'> | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const address = value as Record<string, unknown>;
+  const fullName = String(address.fullName || '').trim();
+  const street = String(address.street || '').trim();
+  const city = String(address.city || '').trim();
+  const state = String(address.state || '').trim();
+  const zip = String(address.zip || '').trim();
+  const country = String(address.country || '').trim();
+  const phone = String(address.phone || '').trim();
+
+  if (!street || !city || !state || !zip) {
+    return null;
+  }
+
+  return {
+    fullName,
+    street,
+    city,
+    state,
+    zip,
+    country,
+    phone,
+  };
+}
+
+function buildSavedAddressKey(address: Omit<IUserSavedAddress, '_id'> | IUserSavedAddress) {
+  return [
+    address.fullName || '',
+    address.street,
+    address.city,
+    address.state,
+    address.zip,
+    address.country || '',
+    address.phone || '',
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .join('|');
+}
+
+function formatSavedAddress(address: IUserSavedAddress) {
+  return {
+    id: address._id?.toString() || '',
+    fullName: address.fullName || '',
+    street: address.street,
+    city: address.city,
+    state: address.state,
+    zip: address.zip,
+    country: address.country || '',
+    phone: address.phone || '',
+    isDefault: false,
+  };
 }
 
 export const registerUser = async (req: Request, res: Response) => {
@@ -157,6 +215,87 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 
     const user = await User.findById(req.user._id).select('-password');
     res.json(user);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getSavedAddresses = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'User not found' });
+      return;
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    if (!user.savedAddresses || user.savedAddresses.length === 0) {
+      const orders = await Order.find({ user: req.user._id })
+        .select('shippingAddress')
+        .sort({ createdAt: -1 });
+
+      const uniqueAddresses = new Map<string, Omit<IUserSavedAddress, '_id'>>();
+
+      orders.forEach((order) => {
+        const normalizedAddress = normalizeSavedAddress(order.shippingAddress);
+
+        if (!normalizedAddress) {
+          return;
+        }
+
+        const addressKey = buildSavedAddressKey(normalizedAddress);
+
+        if (!uniqueAddresses.has(addressKey)) {
+          uniqueAddresses.set(addressKey, normalizedAddress);
+        }
+      });
+
+      if (uniqueAddresses.size > 0) {
+        user.savedAddresses = Array.from(uniqueAddresses.values()) as IUserSavedAddress[];
+        await user.save();
+      }
+    }
+
+    res.json(user.savedAddresses.map(formatSavedAddress));
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteSavedAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'User not found' });
+      return;
+    }
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    const hasSavedAddress = user.savedAddresses.some(
+      (savedAddress) => savedAddress._id?.toString() === req.params.id
+    );
+
+    if (!hasSavedAddress) {
+      res.status(404).json({ message: 'Saved address not found' });
+      return;
+    }
+
+    user.savedAddresses = user.savedAddresses.filter(
+      (savedAddress) => savedAddress._id?.toString() !== req.params.id
+    ) as IUserSavedAddress[];
+    await user.save();
+
+    res.json({ message: 'Saved address removed successfully' });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

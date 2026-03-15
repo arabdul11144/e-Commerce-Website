@@ -1,5 +1,16 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IUserSavedAddress {
+  _id?: mongoose.Types.ObjectId;
+  fullName: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  country?: string;
+  phone?: string;
+}
+
 export interface IUser extends Document {
   name: string;
   firstName: string;
@@ -10,9 +21,23 @@ export interface IUser extends Document {
   role: 'user' | 'admin';
   avatar?: string;
   status: 'active' | 'blocked';
+  savedAddresses: IUserSavedAddress[];
   createdAt: Date;
   updatedAt: Date;
 }
+
+const SavedAddressSchema: Schema = new Schema(
+  {
+    fullName: { type: String, default: '' },
+    street: { type: String, required: true },
+    city: { type: String, required: true },
+    state: { type: String, required: true },
+    zip: { type: String, required: true },
+    country: { type: String, default: '' },
+    phone: { type: String, default: '' },
+  },
+  { _id: true }
+);
 
 const UserSchema: Schema = new Schema(
   {
@@ -25,6 +50,7 @@ const UserSchema: Schema = new Schema(
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     avatar: { type: String, default: '' },
     status: { type: String, enum: ['active', 'blocked'], default: 'active' },
+    savedAddresses: { type: [SavedAddressSchema], default: [] },
   },
   { timestamps: true }
 );

@@ -288,13 +288,6 @@ export function Checkout() {
                   onChange={updateField('postalCode')}
                   required
                 />
-                <Input
-                  label="Country"
-                  placeholder="Sri Lanka"
-                  value={formState.country}
-                  onChange={updateField('country')}
-                  required
-                />
               </div>
             </div>
 

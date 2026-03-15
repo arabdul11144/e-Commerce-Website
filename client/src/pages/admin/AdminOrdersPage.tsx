@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Search, Filter, Eye, Download } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search, Eye, Download, Package, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { useSellerAuth } from '../../contexts/SellerAuthContext';
-import { getErrorMessage } from '../../lib/api';
+import { getErrorMessage, resolveApiUrl } from '../../lib/api';
 import {
   fetchAdminOrderDetails,
   fetchAdminOrders,
+  type AdminOrderDetailsResponse,
   type AdminOrderRow,
   type AdminOrdersResponse,
 } from '../../lib/admin';
@@ -76,6 +77,48 @@ function buildPageNumbers(currentPage: number, totalPages: number) {
   return Array.from({ length: maxButtons }, (_, index) => startPage + index);
 }
 
+function splitOrderIdForDisplay(orderId: string) {
+  const midpoint = Math.ceil(orderId.length / 2);
+
+  return {
+    firstLine: orderId.slice(0, midpoint),
+    secondLine: orderId.slice(midpoint),
+  };
+}
+
+function formatOrderTotalForTable(value: number) {
+  return new Intl.NumberFormat('en-LK', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+function getOrderLineItems(
+  order: AdminOrderRow | null,
+  orderDetails: AdminOrderDetailsResponse | null
+) {
+  if (Array.isArray(orderDetails?.items) && orderDetails.items.length > 0) {
+    return orderDetails.items.map((item, index) => ({
+      id: `${item.product?.name || 'item'}-${index}`,
+      name: item.product?.name || 'Product unavailable',
+      image:
+        Array.isArray(item.product?.images) && typeof item.product.images[0] === 'string'
+          ? item.product.images[0]
+          : '',
+      quantity: Math.max(1, Number(item.quantity) || 1),
+      secondaryText: 'Order item',
+    }));
+  }
+
+  return (order?.products ?? []).map((product, index) => ({
+    id: product.id || `${product.name}-${index}`,
+    name: product.name,
+    image: product.image || '',
+    quantity: Math.max(1, Number(product.quantity) || 1),
+    secondaryText: product.brand || 'Order item',
+  }));
+}
+
 function downloadCsv(rows: AdminOrderRow[]) {
   const header = ['Order ID', 'Customer', 'Email', 'Date', 'Items', 'Total (LKR)', 'Payment', 'Status'];
   const csvRows = rows.map((row) =>
@@ -107,11 +150,15 @@ function downloadCsv(rows: AdminOrderRow[]) {
 export function AdminOrdersPage() {
   const { token, seller } = useSellerAuth();
   const [activeTab, setActiveTab] = useState('all');
-  const [paymentFilter, setPaymentFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [ordersResponse, setOrdersResponse] = useState<AdminOrdersResponse>(EMPTY_ORDERS);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<AdminOrderRow | null>(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] =
+    useState<AdminOrderDetailsResponse | null>(null);
+  const [isOrderDetailsLoading, setIsOrderDetailsLoading] = useState(false);
+  const activeOrderRequestRef = useRef<string | null>(null);
 
   const tabs = [
     { id: 'all', label: 'All Orders' },
@@ -124,7 +171,7 @@ export function AdminOrdersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, paymentFilter, searchTerm]);
+  }, [activeTab, searchTerm]);
 
   useEffect(() => {
     if (!token || !seller) {
@@ -141,7 +188,6 @@ export function AdminOrdersPage() {
       limit: 8,
       search: searchTerm,
       status: activeTab,
-      paymentStatus: paymentFilter,
     })
       .then((response) => {
         if (!isCancelled) {
@@ -163,81 +209,53 @@ export function AdminOrdersPage() {
     return () => {
       isCancelled = true;
     };
-  }, [activeTab, page, paymentFilter, searchTerm, seller, token]);
-
-  const paymentFilterLabel = useMemo(() => {
-    switch (paymentFilter) {
-      case 'paid':
-        return 'Payment: Paid';
-      case 'pending':
-        return 'Payment: Pending';
-      case 'failed':
-        return 'Payment: Failed';
-      case 'refunded':
-        return 'Payment: Refunded';
-      default:
-        return 'Payment: All';
-    }
-  }, [paymentFilter]);
+  }, [activeTab, page, searchTerm, seller, token]);
 
   const pageNumbers = useMemo(
     () => buildPageNumbers(ordersResponse.pagination.page, ordersResponse.pagination.totalPages),
     [ordersResponse.pagination.page, ordersResponse.pagination.totalPages]
   );
 
-  const cyclePaymentFilter = () => {
-    setPaymentFilter((currentFilter) => {
-      switch (currentFilter) {
-        case 'all':
-          return 'paid';
-        case 'paid':
-          return 'pending';
-        case 'pending':
-          return 'failed';
-        case 'failed':
-          return 'refunded';
-        default:
-          return 'all';
-      }
-    });
-  };
-
   const handleExport = () => {
     downloadCsv(ordersResponse.items);
   };
 
-  const handleView = async (orderId: string) => {
+  const closeOrderDetails = () => {
+    activeOrderRequestRef.current = null;
+    setSelectedOrder(null);
+    setSelectedOrderDetails(null);
+    setIsOrderDetailsLoading(false);
+  };
+
+  const handleView = async (order: AdminOrderRow) => {
     if (!token) {
       return;
     }
 
-    try {
-      const order = await fetchAdminOrderDetails(token, orderId);
-      const itemCount = Array.isArray(order.items)
-        ? order.items.reduce(
-            (count: number, item: { quantity?: number }) =>
-              count + (Number(item.quantity) || 0),
-            0
-          )
-        : 0;
+    activeOrderRequestRef.current = order.id;
+    setSelectedOrder(order);
+    setSelectedOrderDetails(null);
+    setIsOrderDetailsLoading(true);
 
-      window.alert(
-        [
-          `Order ID: ${order.id || order._id || orderId}`,
-          `Status: ${order.status || 'pending'}`,
-          `Payment: ${order.paymentStatus || 'pending'}`,
-          `Total: ${formatCurrency(Number(order.total || 0), {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`,
-          `Items: ${itemCount}`,
-          `Contact: ${order.contactEmail || order.shippingAddress?.fullName || 'N/A'}`,
-        ].join('\n')
-      );
+    try {
+      const orderDetails = await fetchAdminOrderDetails(token, order.id);
+
+      if (activeOrderRequestRef.current === order.id) {
+        setSelectedOrderDetails(orderDetails);
+      }
     } catch (error) {
+      if (activeOrderRequestRef.current === order.id) {
+        closeOrderDetails();
+      }
       toast.error(getErrorMessage(error));
+    } finally {
+      if (activeOrderRequestRef.current === order.id) {
+        setIsOrderDetailsLoading(false);
+      }
     }
   };
+
+  const orderLineItems = getOrderLineItems(selectedOrder, selectedOrderDetails);
 
   return (
     <div className="space-y-8">
@@ -285,20 +303,17 @@ export function AdminOrdersPage() {
               className="w-full bg-background border border-subtle/50 rounded-lg py-2 pl-9 pr-4 text-sm text-primary focus:outline-none focus:border-accent-blue transition-colors"
             />
           </div>
-          <Button variant="outline" leftIcon={<Filter className="w-4 h-4" />} onClick={cyclePaymentFilter}>
-            {paymentFilterLabel}
-          </Button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-elevated/50 text-muted text-xs uppercase tracking-wider border-b border-subtle/30">
+                <th className="p-4 font-medium">Items</th>
                 <th className="p-4 font-medium">Order ID</th>
                 <th className="p-4 font-medium">Customer</th>
-                <th className="p-4 font-medium">Date</th>
-                <th className="p-4 font-medium">Items</th>
-                <th className="p-4 font-medium">Total</th>
+                <th className="p-4 font-medium whitespace-nowrap">Date</th>
+                <th className="p-4 font-medium">Total (LKR)</th>
                 <th className="p-4 font-medium">Payment</th>
                 <th className="p-4 font-medium">Status</th>
                 <th className="p-4 font-medium text-right">Actions</th>
@@ -306,44 +321,88 @@ export function AdminOrdersPage() {
             </thead>
             <tbody className="divide-y divide-subtle/20">
               {!isLoading &&
-                ordersResponse.items.map((order) => (
-                  <motion.tr
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    key={order.id}
-                    className="hover:bg-elevated/30 transition-colors group"
-                  >
-                    <td className="p-4">
-                      <span className="text-sm font-medium text-primary">
-                        {order.id}
+                ordersResponse.items.map((order) => {
+                  const { firstLine, secondLine } = splitOrderIdForDisplay(order.id);
+
+                  return (
+                    <motion.tr
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      key={order.id}
+                      className="hover:bg-elevated/30 transition-colors group"
+                    >
+                    <td className="p-4 align-top">
+                      {order.products && order.products.length > 0 ? (
+                        <div className="min-w-[220px] space-y-3">
+                          {order.products.slice(0, 2).map((product) => (
+                            <div key={`${order.id}-${product.id || product.name}`} className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded bg-background border border-subtle/30 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                {product.image ? (
+                                  <img
+                                    src={resolveApiUrl(product.image)}
+                                    alt={product.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Package className="w-4 h-4 text-muted" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-primary line-clamp-1">
+                                  {product.name}
+                                </p>
+                                <p className="text-xs text-muted line-clamp-1">
+                                  {product.brand || 'Ordered product'} Â· Qty: {product.quantity}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                          {order.products.length > 2 && (
+                            <p className="text-xs text-muted">
+                              +{order.products.length - 2} more product(s)
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-body">{order.items} items</span>
+                      )}
+                    </td>
+                    <td className="p-4 align-top">
+                      <span className="inline-flex flex-col text-xs font-medium leading-tight text-primary">
+                        <span>{firstLine}</span>
+                        {secondLine ? <span>{secondLine}</span> : null}
                       </span>
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 align-top">
                       <p className="text-sm font-medium text-primary">
                         {order.customer}
                       </p>
                       <p className="text-xs text-muted">{order.email}</p>
                     </td>
-                    <td className="p-4 text-sm text-body">{order.date}</td>
-                    <td className="p-4 text-sm text-body">{order.items} items</td>
-                    <td className="p-4 text-sm font-medium text-primary">
-                      {formatCurrency(order.total, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                    <td className="p-4 align-top text-xs text-body whitespace-nowrap">
+                      {order.date}
                     </td>
-                    <td className="p-4">{getPaymentBadge(order.payment)}</td>
-                    <td className="p-4">{getStatusBadge(order.status)}</td>
-                    <td className="p-4 text-right">
+                    <td className="p-4 align-top text-sm font-medium text-primary">
+                      {formatOrderTotalForTable(order.total)}
+                    </td>
+                    <td className="p-4 align-top">{getPaymentBadge(order.payment)}</td>
+                    <td className="p-4 align-top">{getStatusBadge(order.status)}</td>
+                    <td className="p-4 align-top text-right">
                       <button
-                        onClick={() => handleView(order.id)}
-                        className="p-1.5 text-muted hover:text-accent-blue hover:bg-accent-blue/10 rounded transition-colors inline-flex items-center gap-1 text-xs font-medium"
+                        type="button"
+                        onClick={() => handleView(order)}
+                        aria-haspopup="dialog"
+                        aria-label={`View order ${order.id}`}
+                        disabled={isOrderDetailsLoading && selectedOrder?.id === order.id}
+                        className="p-1.5 text-muted hover:text-accent-blue hover:bg-accent-blue/10 rounded transition-colors inline-flex items-center gap-1 text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Eye className="w-4 h-4" /> View
+                        <Eye className="w-4 h-4" />
+                        {isOrderDetailsLoading && selectedOrder?.id === order.id ? 'Loading...' : 'View'}
                       </button>
                     </td>
-                  </motion.tr>
-                ))}
+                    </motion.tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
@@ -391,6 +450,137 @@ export function AdminOrdersPage() {
           </div>
         </div>
       </Card>
+
+      <AnimatePresence>
+        {selectedOrder && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center px-4 py-6"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.98 }}
+              className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl border border-subtle/30 bg-surface shadow-2xl shadow-black/50"
+            >
+              <div className="flex items-center justify-between px-6 py-5 border-b border-subtle/30">
+                <div>
+                  <h2 className="text-xl font-bold text-primary">Order Details</h2>
+                  <p className="text-sm text-muted mt-1">
+                    Review order {selectedOrder.id} from {selectedOrder.date}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeOrderDetails}
+                  className="p-2 rounded-lg text-muted hover:text-primary hover:bg-elevated transition-colors"
+                  aria-label="Close order details"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="max-h-[calc(85vh-84px)] overflow-y-auto custom-scrollbar p-6 space-y-4">
+                {isOrderDetailsLoading && (
+                  <div className="py-12 text-center text-muted">Loading order details...</div>
+                )}
+
+                {!isOrderDetailsLoading && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Card className="p-4">
+                        <p className="text-xs uppercase tracking-wider text-muted">Customer</p>
+                        <p className="mt-2 text-sm font-medium text-primary">
+                          {selectedOrder.customer}
+                        </p>
+                        <p className="mt-1 text-xs text-muted">
+                          {selectedOrderDetails?.contactEmail || selectedOrder.email}
+                        </p>
+                        <p className="mt-1 text-xs text-muted">
+                          {selectedOrderDetails?.shippingAddress?.fullName || 'No delivery contact'}
+                        </p>
+                      </Card>
+
+                      <Card className="p-4">
+                        <p className="text-xs uppercase tracking-wider text-muted">Summary</p>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-muted">Total</span>
+                            <span className="font-medium text-primary">
+                              {formatCurrency(selectedOrder.total, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-muted">Items</span>
+                            <span className="font-medium text-primary">{selectedOrder.items}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm text-muted">Payment</span>
+                            {getPaymentBadge(selectedOrder.payment)}
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm text-muted">Status</span>
+                            {getStatusBadge(selectedOrder.status)}
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+
+                    <Card className="p-4">
+                      <div className="flex items-center justify-between gap-4 mb-4">
+                        <div>
+                          <h3 className="text-sm font-semibold text-primary">Order Items</h3>
+                          <p className="text-xs text-muted mt-1">
+                            Seller-scoped items included in this order.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {orderLineItems.length > 0 ? (
+                          orderLineItems.map((item) => (
+                            <div key={item.id} className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded bg-background border border-subtle/30 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                {item.image ? (
+                                  <img
+                                    src={resolveApiUrl(item.image)}
+                                    alt={item.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Package className="w-4 h-4 text-muted" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-primary line-clamp-1">
+                                  {item.name}
+                                </p>
+                                <p className="text-xs text-muted line-clamp-1">
+                                  {item.secondaryText}
+                                </p>
+                              </div>
+                              <span className="text-xs font-medium text-primary whitespace-nowrap">
+                                Qty: {item.quantity}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted">No order items available.</p>
+                        )}
+                      </div>
+                    </Card>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

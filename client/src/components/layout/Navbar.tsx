@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -87,6 +87,11 @@ export function Navbar({
   const headerShiftClass = isNotificationDrawerOpen
     ? 'lg:pr-[clamp(320px,25vw,420px)]'
     : '';
+  const searchIconActive = isSearchOpen || Boolean(searchQuery.trim());
+  const accountIconActive = location.pathname === '/account';
+  const wishlistIconActive = location.pathname === '/wishlist';
+  const cartIconActive =
+    location.pathname === '/cart' || location.pathname === '/checkout';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -122,7 +127,9 @@ export function Navbar({
 
       if (
         notificationsPanelRef.current &&
-        !notificationsPanelRef.current.contains(event.target as Node)
+        !notificationsPanelRef.current.contains(event.target as Node) &&
+        notificationDrawerRef.current &&
+        !notificationDrawerRef.current.contains(event.target as Node)
       ) {
         onNotificationDrawerOpenChange(false);
       }
@@ -597,7 +604,7 @@ export function Navbar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-11 h-11"
+                    className={`w-11 h-11 ${searchIconActive ? 'text-accent-gold hover:text-accent-gold' : ''}`}
                     aria-label="Search"
                     onClick={() => {
                       setIsSearchOpen((currentState) => !currentState);
@@ -613,7 +620,9 @@ export function Navbar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="w-11 h-11 relative"
+                  className={`w-11 h-11 relative ${
+                    isNotificationDrawerOpen ? 'text-accent-gold hover:text-accent-gold' : ''
+                  }`}
                   aria-label="Notifications"
                   onClick={handleNotificationsToggle}
                 >
@@ -626,14 +635,8 @@ export function Navbar({
                 </Button>
               </div>
 
-              <Link to={isAuthenticated ? '/account' : '/auth'}>
-                <Button variant="ghost" size="icon" className="w-11 h-11" aria-label="Account">
-                  <User className="w-[22px] h-[22px]" />
-                </Button>
-              </Link>
-
               <Link to="/wishlist">
-                <Button variant="ghost" size="icon" className="w-11 h-11" aria-label="Wishlist">
+                <Button variant="ghost" size="icon" className={`w-11 h-11 ${wishlistIconActive ? 'text-accent-gold hover:text-accent-gold' : ''}`} aria-label="Wishlist">
                   <Heart className="w-[22px] h-[22px]" />
                 </Button>
               </Link>
@@ -642,7 +645,9 @@ export function Navbar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="relative w-11 h-11"
+                  className={`relative w-11 h-11 ${
+                    cartIconActive ? 'text-accent-gold hover:text-accent-gold' : ''
+                  }`}
                   aria-label="Cart"
                 >
                   <ShoppingCart className="w-[22px] h-[22px]" />
@@ -651,6 +656,17 @@ export function Navbar({
                       {cartCount}
                     </span>
                   }
+                </Button>
+              </Link>
+
+              <Link to={isAuthenticated ? '/account' : '/auth'}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`w-11 h-11 ${accountIconActive ? 'text-accent-gold hover:text-accent-gold' : ''}`}
+                  aria-label="Account"
+                >
+                  <User className="w-[22px] h-[22px]" />
                 </Button>
               </Link>
 
@@ -738,6 +754,7 @@ export function Navbar({
             />
 
             <motion.div
+              ref={notificationDrawerRef}
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}

@@ -25,6 +25,10 @@ interface OrderSuccessLocationState {
   order?: OrderSuccessOrder;
 }
 
+const accountOrdersState = {
+  activeTab: 'orders' as const,
+};
+
 function formatShortDate(value: Date) {
   return value.toLocaleDateString(undefined, {
     month: 'short',
@@ -173,11 +177,12 @@ export function OrderSuccess() {
         <div className="bg-elevated rounded-lg p-4 flex items-center justify-between gap-4">
           <span className="text-body">
             {itemCount > 0
-              ? `We'll notify you when your ${itemCount} item(s) ship.`
-              : "We'll notify you when your items ship."}
+              ? `We\'ll notify you when your ${itemCount} item(s) ship.`
+              : "We\'ll notify you when your items ship."}
           </span>
           <Link
             to="/account"
+            state={accountOrdersState}
             className="text-accent-gold hover:text-accent-goldHover font-medium text-sm"
           >
             Track Order
@@ -186,9 +191,9 @@ export function OrderSuccess() {
       </Card>
 
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
-        <Link to="/account">
+        <Link to="/account" state={accountOrdersState}>
           <Button variant="outline" size="lg" className="w-full sm:w-auto">
-            View My Orders
+            View Order
           </Button>
         </Link>
         <Link to="/shop">

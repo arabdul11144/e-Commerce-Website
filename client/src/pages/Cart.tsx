@@ -99,9 +99,12 @@ export function Cart() {
                       <div className="flex items-center border border-subtle/50 rounded-lg bg-background">
                         <button
                           onClick={() =>
-                            updateCartItem(item.product.id, item.quantity - 1)
+                            updateCartItem(
+                              item.product.id,
+                              Math.max(1, item.quantity - 1)
+                            )
                           }
-                          disabled={isPending}
+                          disabled={isPending || item.quantity <= 1}
                           className="px-3 py-1 text-muted hover:text-primary disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           -
@@ -156,7 +159,6 @@ export function Cart() {
                   {shipping === 0 ? 'Free' : formatCurrency(shipping)}
                 </span>
               </div>
-
             </div>
 
             <div className="border-t border-subtle/30 pt-4 mb-8">
@@ -180,15 +182,6 @@ export function Cart() {
                 Proceed to Checkout
               </Button>
             </Link>
-
-            <div className="mt-4 text-center">
-              <Link
-                to="/shop"
-                className="text-sm text-accent-blue hover:text-accent-blueHover transition-colors"
-              >
-                or Continue Shopping
-              </Link>
-            </div>
           </div>
         </div>
       </div>

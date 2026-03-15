@@ -28,7 +28,22 @@ function parsePriceInput(value: string) {
   }
 
   const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+  return Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : undefined;
+}
+
+function sanitizeNonNegativeNumberInput(value: string) {
+  if (!value) {
+    return '';
+  }
+
+  const sanitizedValue = value.replace(/-/g, '');
+  const numericValue = Number(sanitizedValue);
+
+  if (!Number.isFinite(numericValue)) {
+    return sanitizedValue;
+  }
+
+  return String(Math.max(0, numericValue));
 }
 
 export function Shop() {
@@ -331,8 +346,16 @@ export function Shop() {
                   <span className="text-xs text-muted mb-1 block">Min</span>
                   <input
                     type="number"
+                    min="0"
                     value={minPriceInput}
-                    onChange={(event) => setMinPriceInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === '-' || event.key === 'e' || event.key === 'E') {
+                        event.preventDefault();
+                      }
+                    }}
+                    onChange={(event) =>
+                      setMinPriceInput(sanitizeNonNegativeNumberInput(event.target.value))
+                    }
                     className="w-full bg-background border border-subtle/50 rounded-md py-1.5 px-3 text-sm text-primary focus:outline-none focus:border-accent-blue"
                   />
                 </div>
@@ -341,8 +364,16 @@ export function Shop() {
                   <span className="text-xs text-muted mb-1 block">Max</span>
                   <input
                     type="number"
+                    min="0"
                     value={maxPriceInput}
-                    onChange={(event) => setMaxPriceInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === '-' || event.key === 'e' || event.key === 'E') {
+                        event.preventDefault();
+                      }
+                    }}
+                    onChange={(event) =>
+                      setMaxPriceInput(sanitizeNonNegativeNumberInput(event.target.value))
+                    }
                     className="w-full bg-background border border-subtle/50 rounded-md py-1.5 px-3 text-sm text-primary focus:outline-none focus:border-accent-blue"
                   />
                 </div>

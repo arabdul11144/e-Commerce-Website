@@ -93,7 +93,7 @@ export const addToCart = async (req: AuthRequest, res: Response) => {
 export const updateCartItem = async (req: AuthRequest, res: Response) => {
   try {
     const productId = String(req.params.productId ?? '');
-    const quantity = normalizeQuantity(req.body?.quantity, 0);
+    const quantity = Math.max(1, normalizeQuantity(req.body?.quantity));
 
     const cart = await Cart.findOne({ user: req.user?._id });
 
@@ -114,11 +114,7 @@ export const updateCartItem = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    if (quantity <= 0) {
-      cart.items.splice(itemIndex, 1);
-    } else {
-      cart.items[itemIndex].quantity = quantity;
-    }
+    cart.items[itemIndex].quantity = quantity;
 
     await cart.save();
     const updatedCart = await Cart.findOne({ user: req.user?._id }).populate('items.product');

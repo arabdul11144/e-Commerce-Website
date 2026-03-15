@@ -66,6 +66,32 @@ function createPreviewEntry(file: File) {
   };
 }
 
+function sanitizeNonNegativeInput(value: string, allowDecimal = true) {
+  if (!value) {
+    return '';
+  }
+
+  const sanitizedValue = value.replace(/-/g, '');
+
+  if (allowDecimal) {
+    const numericValue = Number(sanitizedValue);
+
+    if (!Number.isFinite(numericValue)) {
+      return sanitizedValue;
+    }
+
+    return String(Math.max(0, numericValue));
+  }
+
+  const numericValue = Number.parseInt(sanitizedValue, 10);
+
+  if (!Number.isFinite(numericValue)) {
+    return sanitizedValue;
+  }
+
+  return String(Math.max(0, Math.trunc(numericValue)));
+}
+
 export function ProductFormModal({
   isOpen,
   mode,
@@ -355,10 +381,67 @@ export function ProductFormModal({
                       <option value="sale">Sale Product</option>
                     </select>
                   </div>
-                  <Input label="Price" type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} required />
-                  <Input label="Discount Price" type="number" min="0" step="0.01" value={discountPrice} onChange={(event) => setDiscountPrice(event.target.value)} />
-                  <Input label="Shipping Fee" type="number" min="0" step="0.01" value={shippingFee} onChange={(event) => setShippingFee(event.target.value)} required />
-                  <Input label="Stock" type="number" min="0" step="1" value={stock} onChange={(event) => setStock(event.target.value)} required />
+                  <Input
+                    label="Price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={price}
+                    onKeyDown={(event) => {
+                      if (event.key === '-' || event.key === 'e' || event.key === 'E') {
+                        event.preventDefault();
+                      }
+                    }}
+                    onChange={(event) => setPrice(sanitizeNonNegativeInput(event.target.value))}
+                    required
+                  />
+                  <Input
+                    label="Discount Price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={discountPrice}
+                    onKeyDown={(event) => {
+                      if (event.key === '-' || event.key === 'e' || event.key === 'E') {
+                        event.preventDefault();
+                      }
+                    }}
+                    onChange={(event) =>
+                      setDiscountPrice(sanitizeNonNegativeInput(event.target.value))
+                    }
+                  />
+                  <Input
+                    label="Shipping Fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={shippingFee}
+                    onKeyDown={(event) => {
+                      if (event.key === '-' || event.key === 'e' || event.key === 'E') {
+                        event.preventDefault();
+                      }
+                    }}
+                    onChange={(event) =>
+                      setShippingFee(sanitizeNonNegativeInput(event.target.value))
+                    }
+                    required
+                  />
+                  <Input
+                    label="Stock"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={stock}
+                    onKeyDown={(event) => {
+                      if (event.key === '-' || event.key === 'e' || event.key === 'E') {
+                        event.preventDefault();
+                      }
+                    }}
+                    onChange={(event) =>
+                      setStock(sanitizeNonNegativeInput(event.target.value, false))
+                    }
+                    required
+                  />
                 </div>
 
                 <div className="space-y-5">

@@ -4,6 +4,50 @@ import { AuthRequest } from '../middlewares/auth.middleware';
 import Order from '../models/Order';
 import Cart from '../models/Cart';
 import Product from '../models/Product';
+import User, { type IUserSavedAddress } from '../models/User';
+
+function normalizeSavedAddress(value: unknown): Omit<IUserSavedAddress, '_id'> | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const address = value as Record<string, unknown>;
+  const fullName = String(address.fullName || '').trim();
+  const street = String(address.street || '').trim();
+  const city = String(address.city || '').trim();
+  const state = String(address.state || '').trim();
+  const zip = String(address.zip || '').trim();
+  const country = String(address.country || '').trim();
+  const phone = String(address.phone || '').trim();
+
+  if (!street || !city || !state || !zip) {
+    return null;
+  }
+
+  return {
+    fullName,
+    street,
+    city,
+    state,
+    zip,
+    country,
+    phone,
+  };
+}
+
+function buildSavedAddressKey(address: Omit<IUserSavedAddress, '_id'> | IUserSavedAddress) {
+  return [
+    address.fullName || '',
+    address.street,
+    address.city,
+    address.state,
+    address.zip,
+    address.country || '',
+    address.phone || '',
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .join('|');
+}
 
 export const createOrder = async (req: AuthRequest, res: Response) => {
   try {
@@ -72,17 +116,21 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
           quantity,
         };
       })
-      .filter((item: {
-        product: typeof products[number]['_id'];
-        seller?: typeof products[number]['seller'];
-        price: number;
-        quantity: number;
-      } | null): item is {
-        product: typeof products[number]['_id'];
-        seller?: typeof products[number]['seller'];
-        price: number;
-        quantity: number;
-      } => item !== null);
+      .filter(
+        (
+          item: {
+            product: typeof products[number]['_id'];
+            seller?: typeof products[number]['seller'];
+            price: number;
+            quantity: number;
+          } | null
+        ): item is {
+          product: typeof products[number]['_id'];
+          seller?: typeof products[number]['seller'];
+          price: number;
+          quantity: number;
+        } => item !== null
+      );
 
     if (normalizedItems.length === 0) {
       res.status(400).json({ message: 'No valid order items' });
@@ -104,6 +152,23 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
     });
 
     const createdOrder = await order.save();
+    const normalizedAddress = normalizeSavedAddress(shippingAddress);
+
+    if (normalizedAddress && req.user?._id) {
+      const user = await User.findById(req.user._id);
+
+      if (user) {
+        const addressAlreadyExists = user.savedAddresses.some(
+          (savedAddress) =>
+            buildSavedAddressKey(savedAddress) === buildSavedAddressKey(normalizedAddress)
+        );
+
+        if (!addressAlreadyExists) {
+          user.savedAddresses.push(normalizedAddress as IUserSavedAddress);
+          await user.save();
+        }
+      }
+    }
 
     if (clearCart === true) {
       const cart = await Cart.findOne({ user: req.user?._id });
@@ -137,6 +202,40 @@ export const getUserOrders = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const cancelOrder = async (req: AuthRequest, res: Response) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      res.status(404).json({ message: 'Order not found' });
+      return;
+    }
+
+    if (order.user.toString() !== req.user?._id.toString() && req.user?.role !== 'admin') {
+      res.status(403).json({ message: 'Not authorized to cancel this order' });
+      return;
+    }
+
+    if (order.status === 'cancelled') {
+      res.status(400).json({ message: 'Order has already been cancelled' });
+      return;
+    }
+
+    if (!['pending', 'processing', 'confirmed'].includes(order.status)) {
+      res.status(400).json({ message: 'This order can no longer be cancelled' });
+      return;
+    }
+
+    order.status = 'cancelled';
+    await order.save();
+    await order.populate('items.product');
+
+    res.json(order);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getOrderById = async (req: AuthRequest, res: Response) => {
   try {
     const order = await Order.findById(req.params.id).populate('items.product');
@@ -146,7 +245,6 @@ export const getOrderById = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Ensure user can only view their own orders (unless admin)
     if (order.user.toString() !== req.user?._id.toString() && req.user?.role !== 'admin') {
       res.status(403).json({ message: 'Not authorized to view this order' });
       return;
